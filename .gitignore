@@ -1,0 +1,4 @@
+Cargo.lock
+/target
+/tests
+dmg_boot.bin
