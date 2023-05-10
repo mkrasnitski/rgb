@@ -1,9 +1,8 @@
-mod bus;
 mod instruction;
 
+use crate::bus::MemoryBus;
 use crate::utils::BitExtract;
 use anyhow::{bail, Result};
-use bus::*;
 use instruction::*;
 use num_traits::FromPrimitive;
 
@@ -16,7 +15,7 @@ pub struct Cpu {
 }
 
 impl Cpu {
-    pub fn new(bootrom: [u8; 0x100], cartridge: Box<[u8; 0x8000]>) -> Self {
+    pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
         let memory = MemoryBus::new(bootrom, cartridge);
         let mut cpu = Self {
             memory,
