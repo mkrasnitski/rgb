@@ -1,6 +1,7 @@
 mod bus;
 mod instruction;
 
+use crate::utils::BitExtract;
 use anyhow::{bail, Result};
 use bus::*;
 use instruction::*;
@@ -9,39 +10,87 @@ use num_traits::FromPrimitive;
 pub struct Cpu {
     registers: Registers,
     memory: MemoryBus,
+    cycles: u64,
+    ime: bool,
+    halted: bool,
 }
 
 impl Cpu {
     pub fn new(bootrom: [u8; 0x100], cartridge: Box<[u8; 0x8000]>) -> Self {
         let memory = MemoryBus::new(bootrom, cartridge);
-        Self {
+        let mut cpu = Self {
             memory,
             registers: Registers::default(),
-        }
+            cycles: 0,
+            ime: false,
+            halted: false,
+        };
+
+        cpu.registers.pc = 0x100;
+        cpu
     }
 
     pub fn run(mut self) -> Result<()> {
         loop {
-            let instr = self.decode_instr()?;
-            let len = instr.length() as u16;
-            #[cfg(debug_assertions)]
-            {
-                let bytes = {
-                    (self.registers.pc..self.registers.pc + len)
-                        .map(|addr| format!("{:02x}", self.memory.read(addr)))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                };
-                println!(
-                    "{:04X} | {:>8} | {:?} | {:?}",
-                    self.registers.pc,
-                    bytes,
-                    instr.mcycles(),
-                    instr,
-                );
+            self.check_for_interrupts();
+            if self.halted {
+                self.mtick();
+            } else {
+                let instr = self.decode_instr()?;
+                let len = instr.length() as u16;
+                #[cfg(debug_assertions)]
+                {
+                    let bytes = {
+                        (self.registers.pc..self.registers.pc + len)
+                            .map(|addr| format!("{:02x}", self.memory.read(addr)))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    };
+                    println!(
+                        "{} | {:04X} | {bytes:>8} | {:?} | {instr:?}",
+                        self.cycles,
+                        self.registers.pc,
+                        instr.mcycles(),
+                    );
+                }
+                self.registers.pc += len;
+                let cycles = self.execute_instr(instr);
+                for _ in 0..cycles {
+                    self.mtick();
+                }
             }
-            self.registers.pc += len;
-            self.execute_instr(instr);
+        }
+    }
+
+    fn check_for_interrupts(&mut self) {
+        let int = self.memory.int_flag & self.memory.int_enable;
+        for i in 0..5 {
+            if int.bit(i) {
+                self.halted = false;
+                if self.ime {
+                    self.memory.int_flag &= !(1 << i);
+                    self.ime = false;
+                    self.push16(self.registers.pc);
+                    self.registers.pc = 0x40 + (i << 3) as u16;
+                    break;
+                }
+            }
+        }
+    }
+
+    fn mtick(&mut self) {
+        if self.memory.timers.increment() {
+            self.request_interrupt(2);
+        }
+        self.cycles += 1;
+    }
+
+    fn request_interrupt(&mut self, int: u8) {
+        if int < 5 {
+            self.memory
+                .write(0xff0f, self.memory.read(0xff0f) | 1 << int);
+        } else {
+            unreachable!()
         }
     }
 
@@ -133,7 +182,8 @@ impl Cpu {
         })
     }
 
-    fn execute_instr(&mut self, instr: Instruction) {
+    fn execute_instr(&mut self, instr: Instruction) -> u64 {
+        let mut branch_taken = false;
         match instr {
             Instruction::Nop => (),
 
@@ -279,7 +329,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some((val >> 7) & 1 == 1),
+                    Some(val.bit(7)),
                 );
             }
             Instruction::Rrc(r8) => {
@@ -290,7 +340,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some(val & 1 == 1),
+                    Some(val.bit(0)),
                 );
             }
             Instruction::Rl(r8) => {
@@ -301,7 +351,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some((val >> 7) & 1 == 1),
+                    Some(val.bit(7)),
                 );
             }
             Instruction::Rr(r8) => {
@@ -312,7 +362,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some(val & 1 == 1),
+                    Some(val.bit(0)),
                 );
             }
             Instruction::Sla(r8) => {
@@ -323,7 +373,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some((val >> 7) & 1 == 1),
+                    Some(val.bit(7)),
                 );
             }
             Instruction::Sra(r8) => {
@@ -334,7 +384,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some(val & 1 == 1),
+                    Some(val.bit(0)),
                 );
             }
             Instruction::Swap(r8) => {
@@ -351,7 +401,7 @@ impl Cpu {
                     Some(result == 0),
                     Some(false),
                     Some(false),
-                    Some(val & 1 == 1),
+                    Some(val.bit(0)),
                 );
             }
             Instruction::Bit(pos, r8) => {
@@ -372,39 +422,30 @@ impl Cpu {
                 let val = self.read8(R8::A);
                 let result = val.rotate_left(1);
                 self.write8(R8::A, result);
-                self.set_flags(
-                    Some(false),
-                    Some(false),
-                    Some(false),
-                    Some((val >> 7) & 1 == 1),
-                );
+                self.set_flags(Some(false), Some(false), Some(false), Some(val.bit(7)));
             }
             Instruction::Rla => {
                 let val = self.read8(R8::A);
                 let result = (val << 1) | (self.registers.flags.c as u8);
                 self.write8(R8::A, result);
-                self.set_flags(
-                    Some(false),
-                    Some(false),
-                    Some(false),
-                    Some((val >> 7) & 1 == 1),
-                );
+                self.set_flags(Some(false), Some(false), Some(false), Some(val.bit(7)));
             }
             Instruction::Rrca => {
                 let val = self.read8(R8::A);
                 let result = val.rotate_right(1);
                 self.write8(R8::A, result);
-                self.set_flags(Some(false), Some(false), Some(false), Some(val & 1 == 1));
+                self.set_flags(Some(false), Some(false), Some(false), Some(val.bit(0)));
             }
             Instruction::Rra => {
                 let val = self.read8(R8::A);
                 let result = (val >> 1) | ((self.registers.flags.c as u8) << 7);
                 self.write8(R8::A, result);
-                self.set_flags(Some(false), Some(false), Some(false), Some(val & 1 == 1));
+                self.set_flags(Some(false), Some(false), Some(false), Some(val.bit(0)));
             }
 
             Instruction::Jr(cond, offset) => {
                 if self.read_branch_cond(cond) {
+                    branch_taken = true;
                     self.registers.pc = self.registers.pc.wrapping_add_signed(offset as i16);
                 }
             }
@@ -413,12 +454,14 @@ impl Cpu {
             }
             Instruction::Jp(cond, addr) => {
                 if self.read_branch_cond(cond) {
+                    branch_taken = true;
                     self.registers.pc = addr;
                 }
             }
             Instruction::JpAlways(addr) => self.registers.pc = addr,
             Instruction::Call(cond, addr) => {
                 if self.read_branch_cond(cond) {
+                    branch_taken = true;
                     self.push16(self.registers.pc);
                     self.registers.pc = addr;
                 }
@@ -429,6 +472,7 @@ impl Cpu {
             }
             Instruction::Ret(cond) => {
                 if self.read_branch_cond(cond) {
+                    branch_taken = true;
                     self.registers.pc = self.pop16();
                 }
             }
@@ -439,7 +483,7 @@ impl Cpu {
             }
             Instruction::Reti => {
                 self.registers.pc = self.pop16();
-                // TODO: enable interrupts
+                self.ime = true;
             }
             Instruction::JpHL => self.registers.pc = self.registers.reg16(Reg16::HL),
 
@@ -489,15 +533,23 @@ impl Cpu {
                 self.set_flags(None, Some(true), Some(true), None);
             }
 
-            Instruction::Di => {
-                // TODO
-            }
-            Instruction::Ei => {
-                todo!()
-            }
+            Instruction::Di => self.ime = false,
+            Instruction::Ei => self.ime = true,
 
-            Instruction::Stop | Instruction::Halt => {
+            Instruction::Halt => self.halted = true,
+            Instruction::Stop => {
                 panic!("Unimplemented instruction: {:?}", instr)
+            }
+        }
+
+        match instr.mcycles() {
+            CycleCount::Const(c) => c,
+            CycleCount::Branch(not_taken, taken) => {
+                if branch_taken {
+                    taken
+                } else {
+                    not_taken
+                }
             }
         }
     }

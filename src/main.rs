@@ -1,4 +1,5 @@
 mod cpu;
+mod utils;
 
 use anyhow::Result;
 use cpu::Cpu;
