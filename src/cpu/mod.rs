@@ -120,13 +120,15 @@ impl Cpu {
             0x0b | 0x1b | 0x2b | 0x3b => Instruction::DecR16(r16),
             0x20 | 0x28 | 0x30 | 0x38 => Instruction::Jr(branch, self.u8_arg() as i8),
             0x40..=0x75 | 0x77..=0x7f => Instruction::Ld(LdType::R8(r8_hi, r8_lo)),
-            0x80..=0xbf => self.decode_alu_instr(),
+            0x80..=0xbf => self.decode_alu_instr(byte, AluSrc::R8(r8_lo)),
             0xc0 | 0xd0 | 0xc8 | 0xd8 => Instruction::Ret(branch),
             0xc1 | 0xd1 | 0xe1 | 0xf1 => Instruction::Pop(push_pop),
             0xc2 | 0xd2 | 0xca | 0xda => Instruction::Jp(branch, self.u16_arg()),
             0xc4 | 0xd4 | 0xcc | 0xdc => Instruction::Call(branch, self.u16_arg()),
             0xc5 | 0xd5 | 0xe5 | 0xf5 => Instruction::Push(push_pop),
-            0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => self.decode_alu_instr(),
+            0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => {
+                self.decode_alu_instr(byte, AluSrc::Imm(self.u8_arg()))
+            }
             0xc7 | 0xd7 | 0xe7 | 0xf7 | 0xcf | 0xdf | 0xef | 0xff => Instruction::Rst(hi_3bit << 3),
             0xcb => {
                 let second_byte = self.u8_arg();
@@ -553,13 +555,7 @@ impl Cpu {
         }
     }
 
-    fn decode_alu_instr(&self) -> Instruction {
-        let byte = self.memory.read(self.registers.pc);
-        let src = match byte {
-            0x80..=0xbf => AluSrc::R8(R8::from_u8(byte & 0b111).unwrap()),
-            0xc6 | 0xd6 | 0xe6 | 0xf6 | 0xce | 0xde | 0xee | 0xfe => AluSrc::Imm(self.u8_arg()),
-            _ => unreachable!(),
-        };
+    fn decode_alu_instr(&self, byte: u8, src: AluSrc) -> Instruction {
         match (byte & 0b111111) >> 3 {
             0 => Instruction::Add(src),
             1 => Instruction::Adc(src),
