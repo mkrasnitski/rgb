@@ -108,7 +108,7 @@ impl fmt::Debug for R8 {
                 R8::D => "D",
                 R8::E => "E",
                 R8::H => "H",
-                R8::L => "A",
+                R8::L => "L",
                 R8::HLInd => "(HL)",
             }
         )
@@ -347,7 +347,7 @@ impl fmt::Debug for Instruction {
         match self {
             Nop => write!(f, "NOP"),
             Ld(ld_type) => match ld_type {
-                LdType::R8(dest, str) => write!(f, "LD {dest:?}, {str:?}"),
+                LdType::R8(dest, src) => write!(f, "LD {dest:?}, {src:?}"),
                 LdType::R8Imm(dest, val) => write!(f, "LD {dest:?}, ${val:02x}"),
                 LdType::R16Imm(dest, val) => write!(f, "LD {dest:?}, ${val:04x}"),
                 LdType::AFromInd(ind) => write!(f, "LD A, {ind:?}"),
