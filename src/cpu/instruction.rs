@@ -367,11 +367,6 @@ impl fmt::Debug for Instruction {
                 LdType::SPFromHL => write!(f, "LD SP, HL"),
             },
 
-            IncR8(r8) => write!(f, "INC {r8:?}"),
-            DecR8(r8) => write!(f, "DEC {r8:?}"),
-            IncR16(r16) => write!(f, "INC {r16:?}"),
-            DecR16(r16) => write!(f, "DEC {r16:?}"),
-
             Add(src) => write!(f, "ADD A, {src:?}"),
             Adc(src) => write!(f, "ADC A, {src:?}"),
             Sub(src) => write!(f, "SUB A, {src:?}"),
@@ -380,6 +375,11 @@ impl fmt::Debug for Instruction {
             Xor(src) => write!(f, "XOR A, {src:?}"),
             Or(src) => write!(f, "OR A, {src:?}"),
             Cp(src) => write!(f, "CP A, {src:?}"),
+
+            IncR8(r8) => write!(f, "INC {r8:?}"),
+            DecR8(r8) => write!(f, "DEC {r8:?}"),
+            IncR16(r16) => write!(f, "INC {r16:?}"),
+            DecR16(r16) => write!(f, "DEC {r16:?}"),
 
             AddHL(r16) => write!(f, "ADD HL, {r16:?}"),
             AddSP(val) => write!(f, "ADD SP, {val:+}"),

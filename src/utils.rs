@@ -7,7 +7,11 @@ macro_rules! impl_bit_extract {
         $(
             impl BitExtract for $t {
                 fn bit(self, bit: u8) -> bool {
-                    self & (1 << bit) != 0
+                    if (bit as usize) < 8*std::mem::size_of::<$t>() {
+                        self & (1 << bit) != 0
+                    } else {
+                        unreachable!()
+                    }
                 }
             }
         )*
