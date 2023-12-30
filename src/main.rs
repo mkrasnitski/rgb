@@ -1,9 +1,10 @@
 mod bus;
 mod cpu;
+mod display;
+mod gb;
 mod utils;
 
 use anyhow::Result;
-use cpu::Cpu;
 use std::env;
 
 fn main() -> Result<()> {
@@ -12,7 +13,6 @@ fn main() -> Result<()> {
         .try_into()
         .expect("Bootrom not 0x100 in length");
     let cartridge = std::fs::read(&args[1])?;
-    let cpu = Cpu::new(bootrom, cartridge);
-    cpu.run()?;
-    Ok(())
+    let gb = crate::gb::Gameboy::new(bootrom, cartridge);
+    gb.run()
 }

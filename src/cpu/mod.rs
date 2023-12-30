@@ -6,7 +6,13 @@ use crate::utils::BitExtract;
 use anyhow::{bail, Result};
 use instruction::*;
 use num_traits::FromPrimitive;
+use pixels::Pixels;
 use registers::{Reg16, Reg8, RegWrite, Registers};
+
+const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
+const LIGHT_GRAY: [u8; 4] = [0xaa, 0xaa, 0xaa, 0xff];
+const DARK_GRAY: [u8; 4] = [0x55, 0x55, 0x55, 0xff];
+const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
 pub struct Cpu {
     registers: Registers,
@@ -14,6 +20,7 @@ pub struct Cpu {
     cycles: u64,
     ime: bool,
     halted: bool,
+    draw: bool,
 }
 
 impl Cpu {
@@ -25,42 +32,85 @@ impl Cpu {
             cycles: 0,
             ime: false,
             halted: false,
+            draw: false,
         };
 
         cpu.registers.pc = 0x100;
         cpu
     }
 
-    pub fn run(mut self) -> Result<()> {
+    pub fn run_frame(&mut self) -> Result<()> {
         loop {
-            self.check_for_interrupts();
-            if self.halted {
-                self.mtick();
-            } else {
-                let instr = self.decode_instr()?;
-                let len = instr.length() as u16;
-                #[cfg(debug_assertions)]
-                {
-                    let bytes = {
-                        (self.registers.pc..self.registers.pc + len)
-                            .map(|addr| format!("{:02x}", self.memory.read(addr)))
-                            .collect::<Vec<_>>()
-                            .join(" ")
-                    };
-                    println!(
-                        "{} | {:04X} | {bytes:>8} | {:?} | {instr:?}",
-                        self.cycles,
-                        self.registers.pc,
-                        instr.mcycles(),
-                    );
-                }
-                self.registers.pc += len;
-                let cycles = self.execute_instr(instr);
-                for _ in 0..cycles {
-                    self.mtick();
+            self.step()?;
+            if self.draw {
+                self.draw = false;
+                break Ok(());
+            }
+        }
+    }
+
+    pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
+        let bg_tilemap = 0x9800;
+        let mut frame = [[0; 160]; 144];
+        for i in 0u8..18 {
+            for j in 0u8..20 {
+                let tile_num = self.memory.read(bg_tilemap + 32 * i as u16 + j as u16);
+                let tile_addr = 0x8000 + 16 * tile_num as u16;
+                for row in 0u8..8 {
+                    let hi = self.memory.read(tile_addr + 2 * row as u16 + 1);
+                    let lo = self.memory.read(tile_addr + 2 * row as u16);
+                    for col in 0u8..8 {
+                        frame[8 * i as usize + row as usize][8 * j as usize + 7 - col as usize] =
+                            (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
+                    }
                 }
             }
         }
+        for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
+            let i = idx / 160;
+            let j = idx % 160;
+            let color = match frame[i][j] {
+                0 => WHITE,
+                1 => LIGHT_GRAY,
+                2 => DARK_GRAY,
+                3 => BLACK,
+                _ => unreachable!(),
+            };
+            pixel.copy_from_slice(&color);
+        }
+        pixels.render()?;
+        Ok(())
+    }
+
+    pub fn step(&mut self) -> Result<()> {
+        self.check_for_interrupts();
+        if self.halted {
+            self.mtick();
+        } else {
+            let instr = self.decode_instr()?;
+            let len = instr.length() as u16;
+            #[cfg(debug_assertions)]
+            {
+                let bytes = {
+                    (self.registers.pc..self.registers.pc + len)
+                        .map(|addr| format!("{:02x}", self.memory.read(addr)))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                };
+                println!(
+                    "{} | {:04X} | {bytes:>8} | {:?} | {instr:?}",
+                    self.cycles,
+                    self.registers.pc,
+                    instr.mcycles(),
+                );
+            }
+            self.registers.pc += len;
+            let cycles = self.execute_instr(instr);
+            for _ in 0..cycles {
+                self.mtick();
+            }
+        }
+        Ok(())
     }
 
     fn check_for_interrupts(&mut self) {
@@ -84,6 +134,9 @@ impl Cpu {
             self.request_interrupt(2);
         }
         self.cycles += 1;
+        if self.cycles % 17556 == 0 {
+            self.draw = true;
+        }
     }
 
     fn request_interrupt(&mut self, int: u8) {
@@ -541,7 +594,7 @@ impl Cpu {
 
             Instruction::Halt => self.halted = true,
             Instruction::Stop => {
-                panic!("Unimplemented instruction: {:?}", instr)
+                // panic!("Unimplemented instruction: {:?}", instr)
             }
         }
 
