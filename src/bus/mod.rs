@@ -1,5 +1,6 @@
 mod cartridge;
 
+use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use cartridge::*;
 
@@ -57,10 +58,9 @@ impl Timers {
 pub struct MemoryBus {
     bootrom: [u8; 0x100],
     cartridge: Cartridge,
-    vram: Box<[u8; 0x2000]>,
+    ppu: Ppu,
     sram: Box<[u8; 0x2000]>,
     wram: Box<[u8; 0x2000]>,
-    oam_ram: Box<[u8; 0xA0]>,
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
     io_ram: Box<[u8; 0x80]>,
@@ -74,10 +74,9 @@ impl MemoryBus {
         Self {
             bootrom,
             cartridge: Cartridge::new(cartridge),
-            vram: vec![0; 0x2000].try_into().unwrap(),
+            ppu: Ppu::new(),
             sram: vec![0; 0x2000].try_into().unwrap(),
             wram: vec![0; 0x2000].try_into().unwrap(),
-            oam_ram: vec![0; 0xA0].try_into().unwrap(),
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             io_ram: vec![0; 0x80].try_into().unwrap(),
@@ -91,11 +90,11 @@ impl MemoryBus {
         match addr {
             0x0000..=0x00ff if self.bootrom_enabled => self.bootrom[addr as usize],
             0x0000..=0x7fff => self.cartridge.read(addr),
-            0x8000..=0x9fff => self.vram[addr as usize - 0x8000],
+            0x8000..=0x9fff => self.ppu.read(addr),
             0xa000..=0xbfff => self.sram[addr as usize - 0xa000],
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000],
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000],
-            0xfe00..=0xfe9f => self.oam_ram[addr as usize - 0xfe00],
+            0xfe00..=0xfe9f => self.ppu.read(addr),
             0xfea0..=0xfeff => panic!("Illegal address read: {addr:04x}"),
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80],
 
@@ -109,6 +108,7 @@ impl MemoryBus {
 
             0xff0f => self.int_flag | 0xe0,
             0xffff => self.int_enable,
+            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr),
 
             0xff00..=0xff7f => self.io_ram[addr as usize - 0xff00],
         }
@@ -117,11 +117,11 @@ impl MemoryBus {
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => self.cartridge.write(addr, val),
-            0x8000..=0x9fff => self.vram[addr as usize - 0x8000] = val,
+            0x8000..=0x9fff => self.ppu.write(addr, val),
             0xa000..=0xbfff => self.sram[addr as usize - 0xa000] = val,
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000] = val,
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000] = val,
-            0xfe00..=0xfe9f => self.oam_ram[addr as usize - 0xfe00] = val,
+            0xfe00..=0xfe9f => self.ppu.write(addr, val),
             0xfea0..=0xfeff => panic!("Illegal address write: {addr:04x}"),
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80] = val,
 
@@ -133,6 +133,8 @@ impl MemoryBus {
             0xff0f => self.int_flag = val | 0xE0,
             0xffff => self.int_enable = val,
 
+            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
+
             0xff00..=0xff7f => self.io_ram[addr as usize - 0xff00] = val,
         }
         if addr == 0xff02 && val == 0x81 {
@@ -140,5 +142,9 @@ impl MemoryBus {
             use std::io::Write;
             std::io::stdout().flush().unwrap();
         }
+    }
+
+    pub fn ppu_mut(&mut self) -> &mut Ppu {
+        &mut self.ppu
     }
 }

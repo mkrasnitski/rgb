@@ -1,4 +1,5 @@
 use crate::cpu::Cpu;
+use crate::ppu::Ppu;
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use spin_sleep::LoopHelper;
@@ -65,7 +66,7 @@ impl<const W: u32, const H: u32> Display<W, H> {
         mut self,
         mut cpu: Cpu,
         mut update: impl FnMut(&mut Cpu) -> Result<()>,
-        mut render: impl FnMut(&mut Cpu, &mut Pixels) -> Result<()>,
+        mut render: impl FnMut(&mut Ppu, &mut Pixels) -> Result<()>,
     ) -> Result<()> {
         Ok(self.event_loop.run(|event, elwt| {
             match event {
@@ -83,7 +84,7 @@ impl<const W: u32, const H: u32> Display<W, H> {
                             break;
                         }
                     }
-                    catch_err(&mut || render(&mut cpu, &mut self.pixels), elwt);
+                    catch_err(&mut || render(cpu.ppu_mut(), &mut self.pixels), elwt);
                     if self.frame_time.is_none() {
                         self.frame_time = Some(self.instant.elapsed().as_secs_f64());
                     } else if self.limit_framerate {

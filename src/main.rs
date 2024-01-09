@@ -2,6 +2,7 @@ mod bus;
 mod cpu;
 mod display;
 mod gb;
+mod ppu;
 mod utils;
 
 use anyhow::Result;

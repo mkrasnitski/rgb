@@ -2,17 +2,12 @@ mod instruction;
 mod registers;
 
 use crate::bus::MemoryBus;
+use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use anyhow::{bail, Result};
 use instruction::*;
 use num_traits::FromPrimitive;
-use pixels::Pixels;
 use registers::{Reg16, Reg8, RegWrite, Registers};
-
-const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
-const LIGHT_GRAY: [u8; 4] = [0xaa, 0xaa, 0xaa, 0xff];
-const DARK_GRAY: [u8; 4] = [0x55, 0x55, 0x55, 0xff];
-const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
 pub struct Cpu {
     registers: Registers,
@@ -20,7 +15,6 @@ pub struct Cpu {
     cycles: u64,
     ime: bool,
     halted: bool,
-    draw: bool,
 }
 
 impl Cpu {
@@ -32,7 +26,6 @@ impl Cpu {
             cycles: 0,
             ime: false,
             halted: false,
-            draw: false,
         };
 
         cpu.registers.pc = 0x100;
@@ -42,44 +35,12 @@ impl Cpu {
     pub fn run_frame(&mut self) -> Result<()> {
         loop {
             self.step()?;
-            if self.draw {
-                self.draw = false;
+            let ppu = self.ppu_mut();
+            if ppu.draw {
+                ppu.draw = false;
                 break Ok(());
             }
         }
-    }
-
-    pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
-        let bg_tilemap = 0x9800;
-        let mut frame = [[0; 160]; 144];
-        for i in 0u8..18 {
-            for j in 0u8..20 {
-                let tile_num = self.memory.read(bg_tilemap + 32 * i as u16 + j as u16);
-                let tile_addr = 0x8000 + 16 * tile_num as u16;
-                for row in 0u8..8 {
-                    let hi = self.memory.read(tile_addr + 2 * row as u16 + 1);
-                    let lo = self.memory.read(tile_addr + 2 * row as u16);
-                    for col in 0u8..8 {
-                        frame[8 * i as usize + row as usize][8 * j as usize + 7 - col as usize] =
-                            (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
-                    }
-                }
-            }
-        }
-        for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-            let i = idx / 160;
-            let j = idx % 160;
-            let color = match frame[i][j] {
-                0 => WHITE,
-                1 => LIGHT_GRAY,
-                2 => DARK_GRAY,
-                3 => BLACK,
-                _ => unreachable!(),
-            };
-            pixel.copy_from_slice(&color);
-        }
-        pixels.render()?;
-        Ok(())
     }
 
     pub fn step(&mut self) -> Result<()> {
@@ -135,7 +96,7 @@ impl Cpu {
         }
         self.cycles += 1;
         if self.cycles % 17556 == 0 {
-            self.draw = true;
+            self.ppu_mut().draw = true;
         }
     }
 
@@ -146,6 +107,10 @@ impl Cpu {
         } else {
             unreachable!()
         }
+    }
+
+    pub fn ppu_mut(&mut self) -> &mut Ppu {
+        self.memory.ppu_mut()
     }
 
     fn decode_instr(&self) -> Result<Instruction> {

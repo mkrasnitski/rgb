@@ -23,7 +23,7 @@ impl Gameboy {
         self.display.run(
             self.cpu,
             |cpu| cpu.run_frame(),
-            |cpu, pixels| cpu.render(pixels),
+            |ppu, pixels| ppu.render(pixels),
         )?;
         Ok(())
     }
