@@ -85,19 +85,18 @@ impl Ppu {
     }
 
     pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
-        let bg_tilemap = 0x9800;
         let mut frame = [[0; 160]; 144];
-        for i in 0u8..18 {
+        let bg_tilemap = 0x9800;
+        for i in 0..144 {
             for j in 0u8..20 {
-                let tile_num = self.read(bg_tilemap + 32 * i as u16 + j as u16);
+                let tile_num = self.read(bg_tilemap + 32 * (i as u16 / 8) + j as u16);
                 let tile_addr = 0x8000 + 16 * tile_num as u16;
-                for row in 0u8..8 {
-                    let hi = self.read(tile_addr + 2 * row as u16 + 1);
-                    let lo = self.read(tile_addr + 2 * row as u16);
-                    for col in 0u8..8 {
-                        frame[8 * i as usize + row as usize][8 * j as usize + 7 - col as usize] =
-                            (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
-                    }
+                let row = i % 8;
+                let hi = self.read(tile_addr + 2 * row as u16 + 1);
+                let lo = self.read(tile_addr + 2 * row as u16);
+                for col in 0u8..8 {
+                    frame[i as usize][8 * j as usize + 7 - col as usize] =
+                        (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
                 }
             }
         }
