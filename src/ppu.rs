@@ -23,6 +23,7 @@ pub struct Ppu {
     WY: u8,
     WX: u8,
 
+    cycles: u64,
     pub draw: bool,
 }
 
@@ -42,6 +43,7 @@ impl Ppu {
             OBP1: 0,
             WY: 0,
             WX: 0,
+            cycles: 0,
             draw: false,
         }
     }
@@ -81,6 +83,35 @@ impl Ppu {
             0xff4a => self.WY = val,
             0xff4b => self.WX = val,
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#02x}"),
+        }
+    }
+
+    pub fn step(&mut self) -> bool {
+        if self.cycles == 17556 {
+            self.cycles = 0;
+            self.draw = true;
+        }
+        let vblank = self.cycle();
+        self.cycles += 1;
+        vblank
+    }
+
+    fn cycle(&mut self) -> bool {
+        if self.cycles % 114 == 0 {
+            self.LY = (self.cycles / 114) as u8;
+            if self.LY == 144 {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn draw_check(&mut self) -> bool {
+        if self.draw {
+            self.draw = false;
+            true
+        } else {
+            false
         }
     }
 

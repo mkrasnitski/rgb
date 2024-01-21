@@ -35,9 +35,7 @@ impl Cpu {
     pub fn run_frame(&mut self) -> Result<()> {
         loop {
             self.step()?;
-            let ppu = self.ppu_mut();
-            if ppu.draw {
-                ppu.draw = false;
+            if self.ppu_mut().draw_check() {
                 break Ok(());
             }
         }
@@ -94,10 +92,10 @@ impl Cpu {
         if self.memory.timers.increment() {
             self.request_interrupt(2);
         }
-        self.cycles += 1;
-        if self.cycles % 17556 == 0 {
-            self.ppu_mut().draw = true;
+        if self.ppu_mut().step() {
+            self.request_interrupt(0);
         }
+        self.cycles += 1;
     }
 
     fn request_interrupt(&mut self, int: u8) {
