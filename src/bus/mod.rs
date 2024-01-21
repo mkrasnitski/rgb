@@ -80,7 +80,7 @@ impl MemoryBus {
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             io_ram: vec![0; 0x80].try_into().unwrap(),
-            bootrom_enabled: false,
+            bootrom_enabled: true,
             int_flag: 0xE0,
             int_enable: 0,
         }
@@ -132,6 +132,12 @@ impl MemoryBus {
 
             0xff0f => self.int_flag = val | 0xE0,
             0xffff => self.int_enable = val,
+
+            0xff50 => {
+                if self.bootrom_enabled && val & 1 == 1 {
+                    self.bootrom_enabled = false;
+                }
+            }
 
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
 

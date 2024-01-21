@@ -19,17 +19,13 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
-        let memory = MemoryBus::new(bootrom, cartridge);
-        let mut cpu = Self {
-            memory,
+        Self {
+            memory: MemoryBus::new(bootrom, cartridge),
             registers: Registers::default(),
             cycles: 0,
             ime: false,
             halted: false,
-        };
-
-        cpu.registers.pc = 0x100;
-        cpu
+        }
     }
 
     pub fn run_frame(&mut self) -> Result<()> {
