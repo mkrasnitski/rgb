@@ -141,11 +141,6 @@ impl MemoryBus {
 
             0xff00..=0xff7f => self.io_ram[addr as usize - 0xff00] = val,
         }
-        if addr == 0xff02 && val == 0x81 {
-            print!("{}", self.read(0xff01) as char);
-            use std::io::Write;
-            std::io::stdout().flush().unwrap();
-        }
     }
 
     pub fn ppu_mut(&mut self) -> &mut Ppu {
