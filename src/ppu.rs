@@ -117,24 +117,27 @@ impl Ppu {
 
     pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
         let mut frame = [[0; 160]; 144];
-        let bg_tilemap = 0x9800;
-        for i in 0..144 {
-            for j in 0u8..20 {
-                let tile_num = self.read(bg_tilemap + 32 * (i as u16 / 8) + j as u16);
-                let tile_addr = 0x8000 + 16 * tile_num as u16;
-                let row = i % 8;
-                let hi = self.read(tile_addr + 2 * row as u16 + 1);
-                let lo = self.read(tile_addr + 2 * row as u16);
-                for col in 0u8..8 {
-                    frame[i as usize][8 * j as usize + 7 - col as usize] =
-                        (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
+        let bg_tilemap = match self.LCDC.bit(3) {
+            true => 0x9c00,
+            false => 0x9800,
+        };
+        for row in 0..144 {
+            let y = self.SCY.wrapping_add(row as u8);
+            for tile in 0..32 {
+                let tile_num = self.read(bg_tilemap + 32 * (y as u16 / 8) + tile as u16);
+                let tile_row = self.decode_tile_row(tile_num, y % 8);
+                for col in 0..8 {
+                    let x = (8 * tile + col as u8).wrapping_sub(self.SCX) as usize;
+                    if x < 160 {
+                        frame[row][x] = tile_row[col];
+                    }
                 }
             }
         }
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
             let i = idx / 160;
             let j = idx % 160;
-            let color = match frame[i][j] {
+            let color = match (self.BGP >> (2 * frame[i][j])) & 0b11 {
                 0 => WHITE,
                 1 => LIGHT_GRAY,
                 2 => DARK_GRAY,
@@ -145,5 +148,19 @@ impl Ppu {
         }
         pixels.render()?;
         Ok(())
+    }
+
+    fn decode_tile_row(&self, tile_num: u8, row_num: u8) -> [u8; 8] {
+        let tile_addr = 0x8000 + 16 * tile_num as u16;
+        let row_addr = tile_addr + 2 * row_num as u16;
+
+        let hi = self.read(row_addr + 1);
+        let lo = self.read(row_addr);
+
+        let mut row = [0; 8];
+        for col in 0..8 {
+            row[7 - col] = (((hi >> col) & 1) << 1) | ((lo >> col) & 1);
+        }
+        row
     }
 }
