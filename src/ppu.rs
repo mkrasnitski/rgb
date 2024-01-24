@@ -175,6 +175,24 @@ impl Ppu {
                 }
             }
         }
+
+        if self.LCDC.bit(5) && self.LY >= self.WY {
+            let win_tilemap = match self.LCDC.bit(6) {
+                true => 0x9c00,
+                false => 0x9800,
+            };
+            let y = self.LY - self.WY;
+            for tile in 0..32 {
+                let tile_num = self.read(win_tilemap + 32 * (y as u16 / 8) + tile as u16);
+                let tile_row = self.decode_tile_row(tile_num as u16, y % 8);
+                for col in 0..8 {
+                    let x = 8 * tile as usize + col + self.WX as usize - 7;
+                    if x < 160 {
+                        self.viewport[self.LY as usize][x] = tile_row[col];
+                    }
+                }
+            }
+        }
     }
 
     fn decode_tile_row(&self, tile_num: u8, row_num: u8) -> [u8; 8] {
