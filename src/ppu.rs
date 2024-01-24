@@ -22,6 +22,7 @@ pub struct Ppu {
     OBP1: u8,
     WY: u8,
     WX: u8,
+    WC: u8,
 
     stat_condition: bool,
     viewport: Box<[[u8; 160]; 144]>,
@@ -45,6 +46,7 @@ impl Ppu {
             OBP1: 0,
             WY: 0,
             WX: 0,
+            WC: 0,
 
             stat_condition: false,
             viewport: Box::new([[0; 160]; 144]),
@@ -181,16 +183,20 @@ impl Ppu {
                 true => 0x9c00,
                 false => 0x9800,
             };
-            let y = self.LY - self.WY;
+            let mut window_visible = false;
             for tile in 0..32 {
-                let tile_num = self.read(win_tilemap + 32 * (y as u16 / 8) + tile as u16);
-                let tile_row = self.decode_tile_row(tile_num as u16, y % 8);
+                let tile_num = self.read(win_tilemap + 32 * (self.WC as u16 / 8) + tile as u16);
+                let tile_row = self.decode_tile_row(tile_num as u16, self.WC % 8);
                 for col in 0..8 {
                     let x = 8 * tile as usize + col + self.WX as usize - 7;
                     if x < 160 {
+                        window_visible = true;
                         self.viewport[self.LY as usize][x] = tile_row[col];
                     }
                 }
+            }
+            if window_visible {
+                self.WC += 1;
             }
         }
     }
