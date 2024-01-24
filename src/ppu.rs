@@ -178,7 +178,10 @@ impl Ppu {
     }
 
     fn decode_tile_row(&self, tile_num: u8, row_num: u8) -> [u8; 8] {
-        let tile_addr = 0x8000 + 16 * tile_num as u16;
+        let tile_addr = match self.LCDC.bit(4) {
+            true => 0x8000 + 16 * tile_num as u16,
+            false => 0x9000u16.wrapping_add_signed(16 * tile_num as i8 as i16),
+        };
         let row_addr = tile_addr + 2 * row_num as u16;
 
         let hi = self.read(row_addr + 1);
