@@ -24,10 +24,20 @@ pub struct Ppu {
     WX: u8,
     WC: u8,
 
+    mode: PpuMode,
     stat_condition: bool,
     viewport: Box<[[u8; 160]; 144]>,
     cycles: u64,
     pub draw: bool,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+enum PpuMode {
+    OamScan = 2,
+    Drawing = 3,
+    HBlank = 0,
+    VBlank = 1,
 }
 
 impl Ppu {
@@ -48,6 +58,7 @@ impl Ppu {
             WX: 0,
             WC: 0,
 
+            mode: PpuMode::HBlank,
             stat_condition: false,
             viewport: Box::new([[0; 160]; 144]),
             cycles: 0,
@@ -79,7 +90,10 @@ impl Ppu {
             0x8000..=0x9fff => self.vram[addr as usize - 0x8000] = val,
             0xfe00..=0xfe9f => self.oam_ram[addr as usize - 0xfe00] = val,
             0xff40 => self.LCDC = val,
-            0xff41 => self.STAT = val,
+            0xff41 => {
+                self.STAT &= 0b10000111; // Clear writeable bits
+                self.STAT |= val & 0b01111000; // Set those bits
+            }
             0xff42 => self.SCY = val,
             0xff43 => self.SCX = val,
             0xff44 => self.LY = val,
@@ -106,20 +120,41 @@ impl Ppu {
     fn cycle(&mut self) -> (bool, bool) {
         let mut vblank = false;
 
-        if self.cycles % 114 == 0 {
-            self.LY = (self.cycles / 114) as u8;
-            if self.LY < 144 {
+        let clocks = self.cycles % 114;
+        let scanline = self.cycles / 114;
+
+        if clocks == 0 {
+            self.LY = scanline as u8;
+            if self.LY == 0 {
+                self.WC = 0;
+            }
+        }
+
+        if self.LY < 144 {
+            if clocks == 0 {
+                self.set_mode(PpuMode::OamScan);
+            } else if clocks == 20 {
+                self.set_mode(PpuMode::Drawing);
                 self.draw_line();
+            } else if clocks == 43 {
+                self.set_mode(PpuMode::HBlank);
             }
-            if self.LY == 144 {
-                vblank = true;
-            }
+        } else if self.LY == 144 && clocks == 0 {
+            self.set_mode(PpuMode::VBlank);
+            vblank = true;
         }
 
         let ly_coincidence = self.check_lyc();
         let stat = self.check_stat(ly_coincidence);
 
         (vblank, stat)
+    }
+
+    fn set_mode(&mut self, mode: PpuMode) {
+        self.mode = mode;
+
+        self.STAT &= 0b11111100;
+        self.STAT |= (mode as u8) & 0b11;
     }
 
     fn check_lyc(&mut self) -> bool {
@@ -131,8 +166,14 @@ impl Ppu {
 
     fn check_stat(&mut self, ly_coincidence: bool) -> bool {
         let old = self.stat_condition;
-        self.stat_condition = self.STAT.bit(6) && ly_coincidence;
-        self.stat_condition && !old
+        let mut new = self.STAT.bit(6) && ly_coincidence;
+        for mode in 0..=2 {
+            if self.STAT.bit(mode + 3) {
+                new |= (self.mode as u8) == mode;
+            }
+        }
+        self.stat_condition = new;
+        new && !old
     }
 
     pub fn draw_check(&mut self) -> bool {
