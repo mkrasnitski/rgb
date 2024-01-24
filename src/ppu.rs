@@ -23,6 +23,7 @@ pub struct Ppu {
     WY: u8,
     WX: u8,
 
+    stat_condition: bool,
     viewport: Box<[[u8; 160]; 144]>,
     cycles: u64,
     pub draw: bool,
@@ -45,6 +46,7 @@ impl Ppu {
             WY: 0,
             WX: 0,
 
+            stat_condition: false,
             viewport: Box::new([[0; 160]; 144]),
             cycles: 0,
             draw: false,
@@ -89,27 +91,46 @@ impl Ppu {
         }
     }
 
-    pub fn step(&mut self) -> bool {
+    pub fn step(&mut self) -> (bool, bool) {
         if self.cycles == 17556 {
             self.cycles = 0;
             self.draw = true;
         }
-        let vblank = self.cycle();
+        let (vblank, stat) = self.cycle();
         self.cycles += 1;
-        vblank
+        (vblank, stat)
     }
 
-    fn cycle(&mut self) -> bool {
+    fn cycle(&mut self) -> (bool, bool) {
+        let mut vblank = false;
+
         if self.cycles % 114 == 0 {
             self.LY = (self.cycles / 114) as u8;
             if self.LY < 144 {
                 self.draw_line();
             }
             if self.LY == 144 {
-                return true;
+                vblank = true;
             }
         }
-        false
+
+        let ly_coincidence = self.check_lyc();
+        let stat = self.check_stat(ly_coincidence);
+
+        (vblank, stat)
+    }
+
+    fn check_lyc(&mut self) -> bool {
+        let c = self.LY == self.LYC;
+        self.STAT &= 0b11111011;
+        self.STAT |= (c as u8) << 2;
+        c
+    }
+
+    fn check_stat(&mut self, ly_coincidence: bool) -> bool {
+        let old = self.stat_condition;
+        self.stat_condition = self.STAT.bit(6) && ly_coincidence;
+        self.stat_condition && !old
     }
 
     pub fn draw_check(&mut self) -> bool {

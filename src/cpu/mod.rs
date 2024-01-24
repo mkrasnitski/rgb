@@ -88,8 +88,12 @@ impl Cpu {
         if self.memory.timers.increment() {
             self.request_interrupt(2);
         }
-        if self.ppu_mut().step() {
+        let (vblank, stat) = self.ppu_mut().step();
+        if vblank {
             self.request_interrupt(0);
+        }
+        if stat {
+            self.request_interrupt(1);
         }
         self.cycles += 1;
     }
