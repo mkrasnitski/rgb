@@ -27,7 +27,8 @@ pub struct Ppu {
     mode: PpuMode,
     stat_condition: bool,
     viewport: Box<[[u8; 160]; 144]>,
-    cycles: u64,
+    cycles: u16,
+    ticks: u16,
     pub draw: bool,
 }
 
@@ -62,6 +63,7 @@ impl Ppu {
             stat_condition: false,
             viewport: Box::new([[0; 160]; 144]),
             cycles: 0,
+            ticks: 0,
             draw: false,
         }
     }
@@ -108,13 +110,24 @@ impl Ppu {
     }
 
     pub fn step(&mut self) -> (bool, bool) {
-        if self.cycles == 17556 {
-            self.cycles = 0;
+        if self.ticks == 17556 {
+            self.ticks = 0;
             self.draw = true;
         }
-        let (vblank, stat) = self.cycle();
-        self.cycles += 1;
-        (vblank, stat)
+
+        if self.LCDC.bit(7) {
+            let (vblank, stat) = self.cycle();
+            self.ticks = self.cycles + 1;
+            self.cycles = (self.cycles + 1) % 17556;
+            (vblank, stat)
+        } else {
+            // Hold everything to 0 while PPU is disabled
+            self.cycles = 0;
+            self.LY = 0;
+            self.set_mode(PpuMode::HBlank);
+            self.ticks += 1;
+            (false, false)
+        }
     }
 
     fn cycle(&mut self) -> (bool, bool) {
@@ -187,14 +200,18 @@ impl Ppu {
 
     pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-            let i = idx / 160;
-            let j = idx % 160;
-            let color = match (self.BGP >> (2 * self.viewport[i][j])) & 0b11 {
-                0 => WHITE,
-                1 => LIGHT_GRAY,
-                2 => DARK_GRAY,
-                3 => BLACK,
-                _ => unreachable!(),
+            let color = if self.LCDC.bit(7) {
+                let i = idx / 160;
+                let j = idx % 160;
+                match (self.BGP >> (2 * self.viewport[i][j])) & 0b11 {
+                    0 => WHITE,
+                    1 => LIGHT_GRAY,
+                    2 => DARK_GRAY,
+                    3 => BLACK,
+                    _ => unreachable!(),
+                }
+            } else {
+                WHITE
             };
             pixel.copy_from_slice(&color);
         }
