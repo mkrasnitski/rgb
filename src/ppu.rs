@@ -220,6 +220,13 @@ impl Ppu {
     }
 
     fn draw_line(&mut self) {
+        self.draw_bg_line();
+        if self.LCDC.bit(5) && self.LY >= self.WY {
+            self.draw_win_line();
+        }
+    }
+
+    fn draw_bg_line(&mut self) {
         let bg_tilemap = match self.LCDC.bit(3) {
             true => 0x9c00,
             false => 0x9800,
@@ -235,27 +242,27 @@ impl Ppu {
                 }
             }
         }
+    }
 
-        if self.LCDC.bit(5) && self.LY >= self.WY {
-            let win_tilemap = match self.LCDC.bit(6) {
-                true => 0x9c00,
-                false => 0x9800,
-            };
-            let mut window_visible = false;
-            for tile in 0..32 {
-                let tile_num = self.read(win_tilemap + 32 * (self.WC as u16 / 8) + tile as u16);
-                let tile_row = self.decode_tile_row(tile_num as u16, self.WC % 8);
-                for col in 0..8 {
-                    let x = 8 * tile as usize + col + self.WX as usize - 7;
-                    if x < 160 {
-                        window_visible = true;
-                        self.viewport[self.LY as usize][x] = tile_row[col];
-                    }
+    fn draw_win_line(&mut self) {
+        let win_tilemap = match self.LCDC.bit(6) {
+            true => 0x9c00,
+            false => 0x9800,
+        };
+        let mut window_visible = false;
+        for tile in 0..32 {
+            let tile_num = self.read(win_tilemap + 32 * (self.WC as u16 / 8) + tile as u16);
+            let tile_row = self.decode_tile_row(tile_num as u16, self.WC % 8);
+            for col in 0..8 {
+                let x = 8 * tile as usize + col + self.WX as usize - 7;
+                if x < 160 {
+                    window_visible = true;
+                    self.viewport[self.LY as usize][x] = tile_row[col];
                 }
             }
-            if window_visible {
-                self.WC += 1;
-            }
+        }
+        if window_visible {
+            self.WC += 1;
         }
     }
 
