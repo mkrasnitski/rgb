@@ -220,21 +220,19 @@ impl Ppu {
     }
 
     fn draw_line(&mut self) {
-        self.draw_bg_line();
-        if self.LCDC.bit(5) && self.LY >= self.WY {
-            self.draw_win_line();
+        if self.LCDC.bit(0) {
+            self.draw_bg_line();
+            if self.LCDC.bit(5) && self.LY >= self.WY {
+                self.draw_win_line();
+            }
         }
     }
 
     fn draw_bg_line(&mut self) {
-        let bg_tilemap = match self.LCDC.bit(3) {
-            true => 0x9c00,
-            false => 0x9800,
-        };
+        let tilemap = self.LCDC.bit(3);
         let y = self.SCY.wrapping_add(self.LY);
         for tile in 0..32 {
-            let tile_num = self.read(bg_tilemap + 32 * (y as u16 / 8) + tile as u16);
-            let tile_row = self.decode_tile_row(tile_num, y % 8);
+            let tile_row = self.get_tile_row(tilemap, y, tile);
             for col in 0..8 {
                 let x = (8 * tile + col as u8).wrapping_sub(self.SCX) as usize;
                 if x < 160 {
@@ -245,14 +243,10 @@ impl Ppu {
     }
 
     fn draw_win_line(&mut self) {
-        let win_tilemap = match self.LCDC.bit(6) {
-            true => 0x9c00,
-            false => 0x9800,
-        };
+        let tilemap = self.LCDC.bit(6);
         let mut window_visible = false;
         for tile in 0..32 {
-            let tile_num = self.read(win_tilemap + 32 * (self.WC as u16 / 8) + tile as u16);
-            let tile_row = self.decode_tile_row(tile_num as u16, self.WC % 8);
+            let tile_row = self.get_tile_row(tilemap, self.WC, tile);
             for col in 0..8 {
                 let x = 8 * tile as usize + col + self.WX as usize - 7;
                 if x < 160 {
@@ -264,6 +258,12 @@ impl Ppu {
         if window_visible {
             self.WC += 1;
         }
+    }
+
+    fn get_tile_row(&self, tilemap_bit: bool, line: u8, tile: u8) -> [u8; 8] {
+        let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
+        let tile_num = self.read(tilemap + 32 * (line as u16 / 8) + tile as u16);
+        self.decode_tile_row(tile_num, line % 8)
     }
 
     fn decode_tile_row(&self, tile_num: u8, row_num: u8) -> [u8; 8] {
