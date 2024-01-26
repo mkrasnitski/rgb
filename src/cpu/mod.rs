@@ -17,6 +17,14 @@ pub struct Cpu {
     halted: bool,
 }
 
+enum Interrupt {
+    VBlank = 0,
+    Stat = 1,
+    Timer = 2,
+    Serial = 3,
+    Joypad = 4,
+}
+
 impl Cpu {
     pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
         Self {
@@ -86,25 +94,21 @@ impl Cpu {
 
     fn mtick(&mut self) {
         if self.memory.timers.increment() {
-            self.request_interrupt(2);
+            self.request_interrupt(Interrupt::Timer);
         }
         let (vblank, stat) = self.ppu_mut().step();
         if vblank {
-            self.request_interrupt(0);
+            self.request_interrupt(Interrupt::VBlank);
         }
         if stat {
-            self.request_interrupt(1);
+            self.request_interrupt(Interrupt::Stat);
         }
         self.cycles += 1;
     }
 
-    fn request_interrupt(&mut self, int: u8) {
-        if int < 5 {
-            self.memory
-                .write(0xff0f, self.memory.read(0xff0f) | 1 << int);
-        } else {
-            unreachable!()
-        }
+    fn request_interrupt(&mut self, int: Interrupt) {
+        self.memory
+            .write(0xff0f, self.memory.read(0xff0f) | 1 << (int as u8));
     }
 
     pub fn ppu_mut(&mut self) -> &mut Ppu {
