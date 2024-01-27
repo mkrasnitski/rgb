@@ -138,12 +138,12 @@ impl Ppu {
 
         if clocks == 0 {
             self.LY = scanline as u8;
-            if self.LY == 0 {
+            if scanline == 0 {
                 self.WC = 0;
             }
         }
 
-        if self.LY < 144 {
+        if scanline < 144 {
             if clocks == 0 {
                 self.set_mode(PpuMode::OamScan);
             } else if clocks == 20 {
@@ -152,9 +152,12 @@ impl Ppu {
             } else if clocks == 43 {
                 self.set_mode(PpuMode::HBlank);
             }
-        } else if self.LY == 144 && clocks == 0 {
+        } else if scanline == 144 && clocks == 0 {
             self.set_mode(PpuMode::VBlank);
             vblank = true;
+        } else if scanline == 153 && clocks == 1 {
+            // On the second cycle of line 153, LY is set to 0, weirdly.
+            self.LY = 0;
         }
 
         let ly_coincidence = self.check_lyc();
