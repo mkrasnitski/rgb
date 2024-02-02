@@ -2,8 +2,9 @@ use crate::cpu::Cpu;
 use crate::ppu::Ppu;
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
-use spin_sleep::LoopHelper;
-use std::time::Instant;
+use spin_sleep_util::Interval;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
     event::{Event, WindowEvent},
@@ -18,12 +19,12 @@ const FRAMERATE: f64 = 4194304.0 / 70224.0;
 
 pub struct Display<const W: u32, const H: u32> {
     event_loop: EventLoop<()>,
-    window: Window,
+    window: Arc<Window>,
     input: WinitInputHelper,
-    pixels: Pixels,
+    pixels: Pixels<'static>,
     limit_framerate: bool,
-    frame_limiter: LoopHelper,
-    frame_time: Option<f64>,
+    frame_limiter: Interval,
+    frame_time: Option<Duration>,
     instant: Instant,
 }
 
@@ -31,19 +32,21 @@ impl<const W: u32, const H: u32> Display<W, H> {
     pub fn new(event_loop: EventLoop<()>) -> Self {
         event_loop.set_control_flow(ControlFlow::Poll);
         let size = LogicalSize::new((W * SCALE) as f64, (H * SCALE) as f64);
-        let window = WindowBuilder::new()
-            .with_inner_size(size)
-            .with_min_inner_size(size)
-            .with_resizable(false)
-            .build(&event_loop)
-            .unwrap();
+        let window = Arc::new(
+            WindowBuilder::new()
+                .with_inner_size(size)
+                .with_min_inner_size(size)
+                .with_resizable(false)
+                .build(&event_loop)
+                .unwrap(),
+        );
 
         let pixels = {
             let physical_window_size = window.inner_size();
             let surface_texture = SurfaceTexture::new(
                 physical_window_size.width,
                 physical_window_size.height,
-                &window,
+                Arc::clone(&window),
             );
             Pixels::new(W, H, surface_texture).unwrap()
         };
@@ -54,9 +57,7 @@ impl<const W: u32, const H: u32> Display<W, H> {
             input: WinitInputHelper::new(),
             pixels,
             limit_framerate: true,
-            frame_limiter: LoopHelper::builder()
-                .report_interval_s(1.0)
-                .build_with_target_rate(FRAMERATE),
+            frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
             frame_time: None,
             instant: Instant::now(),
         }
@@ -77,8 +78,7 @@ impl<const W: u32, const H: u32> Display<W, H> {
                     event: WindowEvent::RedrawRequested,
                     ..
                 } => {
-                    while self.instant.elapsed().as_secs_f64() < self.frame_time.unwrap_or_default()
-                    {
+                    while self.instant.elapsed() < self.frame_time.unwrap_or_default() {
                         catch_err(&mut || update(&mut cpu), elwt);
                         if self.limit_framerate {
                             break;
@@ -86,10 +86,10 @@ impl<const W: u32, const H: u32> Display<W, H> {
                     }
                     catch_err(&mut || render(cpu.ppu_mut(), &mut self.pixels), elwt);
                     if self.frame_time.is_none() {
-                        self.frame_time = Some(self.instant.elapsed().as_secs_f64());
-                    } else if self.limit_framerate {
-                        self.frame_limiter.loop_sleep();
-                        self.frame_limiter.loop_start();
+                        self.frame_time = Some(self.instant.elapsed());
+                    }
+                    if self.limit_framerate {
+                        self.frame_limiter.tick();
                     }
                     self.instant = Instant::now();
                 }

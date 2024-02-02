@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0.69"
 enum-primitive-derive = "^0.1"
 num-traits = "^0.1"
-pixels = "0.13.0"
-spin_sleep = "1.1.1"
-winit = { version = "0.29.4", features = ["rwh_05", "x11", "wayland", "wayland-dlopen", "wayland-csd-adwaita"], default-features = false }
+pixels = { git = "https://github.com/mkrasnitski/pixels", branch = "bump-wgpu-winit" }
+spin_sleep_util = "0.1.1"
+winit = "0.29.4"
 winit_input_helper = "0.15.1"
