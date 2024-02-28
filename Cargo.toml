@@ -12,4 +12,3 @@ num-traits = "^0.1"
 pixels = { git = "https://github.com/mkrasnitski/pixels", branch = "bump-wgpu-winit" }
 spin_sleep_util = "0.1.1"
 winit = "0.29.4"
-winit_input_helper = "0.15.1"

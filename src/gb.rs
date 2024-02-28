@@ -20,11 +20,7 @@ impl Gameboy {
     }
 
     pub fn run(self) -> Result<()> {
-        self.display.run(
-            self.cpu,
-            |cpu| cpu.run_frame(),
-            |ppu, pixels| ppu.render(pixels),
-        )?;
+        self.display.run(self.cpu)?;
         Ok(())
     }
 }
