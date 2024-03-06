@@ -1,12 +1,15 @@
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use crate::cpu::Cpu;
+use crate::hotkeys::{Hotkey, KeyMap};
+
 use anyhow::Result;
 use pixels::{Pixels, SurfaceTexture};
 use spin_sleep_util::Interval;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
-    event::{ElementState, Event, KeyEvent, WindowEvent},
+    event::{ElementState, Event as WinitEvent, KeyEvent, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::{Window as WinitWindow, WindowBuilder},
@@ -15,42 +18,76 @@ use winit::{
 const SCALE: u32 = 3;
 const FRAMERATE: f64 = 4194304.0 / 70224.0;
 
+pub enum DisplayEvent {
+    Hotkey((Hotkey, bool)),
+    RedrawRequested,
+    Quit,
+}
+
 pub struct Display<const W: u32, const H: u32> {
-    event_loop: EventLoop<()>,
     window: Window<W, H>,
+    keymap: KeyMap,
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
-    pub fn new(event_loop: EventLoop<()>) -> Self {
-        let display = Window::new(&event_loop);
+    pub fn new(event_loop: &EventLoop<()>) -> Self {
         Self {
-            event_loop,
-            window: display,
+            window: Window::new(event_loop),
+            keymap: KeyMap::new(),
         }
     }
 
-    pub fn run(mut self, mut cpu: Cpu) -> Result<()> {
-        Ok(self.event_loop.run(|event, elwt| match event {
-            Event::AboutToWait => {
+    pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
+        self.window.frame_limiter.run(|| cpu.run_frame())?;
+        cpu.ppu_mut().render(&mut self.window.pixels)?;
+        self.window.frame_limiter.tick();
+        Ok(())
+    }
+
+    pub fn process_winit_events(&mut self, event: &WinitEvent<()>) -> Option<DisplayEvent> {
+        match event {
+            WinitEvent::AboutToWait => {
                 self.window.window.request_redraw();
             }
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::RedrawRequested => {
-                    if let Err(e) = self.window.draw_frame(&mut cpu) {
-                        println!("{e:?}");
-                        elwt.exit();
-                    }
+            WinitEvent::WindowEvent { event, .. } => match event {
+                WindowEvent::RedrawRequested => return Some(DisplayEvent::RedrawRequested),
+                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
+                    return Some(DisplayEvent::Quit)
                 }
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => elwt.exit(),
-                WindowEvent::KeyboardInput { event, .. } => {
-                    if self.window.handle_keyevent(event) {
-                        elwt.exit()
-                    }
-                }
+                WindowEvent::KeyboardInput { event, .. } => return self.handle_keyevent(event),
                 _ => {}
             },
             _ => {}
-        })?)
+        };
+        None
+    }
+
+    pub fn handle_keyevent(&mut self, event: &KeyEvent) -> Option<DisplayEvent> {
+        let PhysicalKey::Code(keycode) = event.physical_key else {
+            return None;
+        };
+        if event.repeat {
+            return None;
+        }
+        match event.state {
+            ElementState::Pressed => {
+                if let KeyCode::Escape = keycode {
+                    Some(DisplayEvent::Quit)
+                } else {
+                    self.keymap
+                        .get_hotkey(&keycode)
+                        .map(|hotkey| DisplayEvent::Hotkey((hotkey, true)))
+                }
+            }
+            ElementState::Released => self
+                .keymap
+                .get_hotkey(&keycode)
+                .map(|hotkey| DisplayEvent::Hotkey((hotkey, false))),
+        }
+    }
+
+    pub fn toggle_frame_limiter(&mut self) {
+        self.window.frame_limiter.limit_framerate = !self.window.frame_limiter.limit_framerate;
     }
 }
 
@@ -93,29 +130,6 @@ impl<const W: u32, const H: u32> Window<W, H> {
                 instant: Instant::now(),
             },
         }
-    }
-
-    fn handle_keyevent(&mut self, event: KeyEvent) -> bool {
-        let PhysicalKey::Code(keycode) = event.physical_key else {
-            return false;
-        };
-        if let ElementState::Pressed = event.state {
-            match keycode {
-                KeyCode::Escape => return true,
-                KeyCode::Space => {
-                    self.frame_limiter.limit_framerate = !self.frame_limiter.limit_framerate
-                }
-                _ => {}
-            }
-        }
-        false
-    }
-
-    fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
-        self.frame_limiter.run(|| cpu.run_frame())?;
-        cpu.ppu_mut().render(&mut self.pixels)?;
-        self.frame_limiter.tick();
-        Ok(())
     }
 }
 

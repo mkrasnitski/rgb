@@ -1,8 +1,10 @@
 mod cartridge;
+pub mod joypad;
 
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use cartridge::*;
+use joypad::Joypad;
 
 pub struct Timers {
     div: u16,
@@ -62,6 +64,7 @@ pub struct MemoryBus {
     wram: Box<[u8; 0x2000]>,
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
+    pub joypad: Joypad,
     io_ram: Box<[u8; 0x80]>,
     bootrom_enabled: bool,
     pub int_flag: u8,
@@ -77,6 +80,7 @@ impl MemoryBus {
             wram: vec![0; 0x2000].try_into().unwrap(),
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
+            joypad: Joypad::default(),
             io_ram: vec![0; 0x80].try_into().unwrap(),
             bootrom_enabled: true,
             int_flag: 0xE0,
@@ -96,6 +100,7 @@ impl MemoryBus {
             0xfea0..=0xfeff => panic!("Illegal address read: {addr:04x}"),
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80],
 
+            0xff00 => self.joypad.read(),
             0xff04 => {
                 let [_, msb] = self.timers.div.to_le_bytes();
                 msb
@@ -123,6 +128,7 @@ impl MemoryBus {
             0xfea0..=0xfeff => panic!("Illegal address write: {addr:04x}"),
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80] = val,
 
+            0xff00 => self.joypad.write(val),
             0xff04 => self.timers.div = 0,
             0xff05 => self.timers.tima = val,
             0xff06 => self.timers.tma = val,

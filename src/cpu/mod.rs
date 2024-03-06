@@ -1,6 +1,7 @@
 mod instruction;
 mod registers;
 
+use crate::bus::joypad::Joypad;
 use crate::bus::MemoryBus;
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
@@ -96,6 +97,9 @@ impl Cpu {
         if self.memory.timers.increment() {
             self.request_interrupt(Interrupt::Timer);
         }
+        if self.memory.joypad.poll() {
+            self.request_interrupt(Interrupt::Joypad);
+        }
         let (vblank, stat) = self.ppu_mut().step();
         if vblank {
             self.request_interrupt(Interrupt::VBlank);
@@ -113,6 +117,10 @@ impl Cpu {
 
     pub fn ppu_mut(&mut self) -> &mut Ppu {
         self.memory.ppu_mut()
+    }
+
+    pub fn joypad_mut(&mut self) -> &mut Joypad {
+        &mut self.memory.joypad
     }
 
     fn decode_instr(&self) -> Result<Instruction> {

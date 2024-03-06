@@ -1,5 +1,6 @@
 use crate::cpu::Cpu;
-use crate::display::Display;
+use crate::display::{Display, DisplayEvent};
+use crate::hotkeys::Hotkey;
 use anyhow::Result;
 use winit::event_loop::EventLoop;
 
@@ -9,18 +10,44 @@ const HEIGHT: u32 = 144;
 pub struct Gameboy {
     cpu: Cpu,
     display: Display<WIDTH, HEIGHT>,
+    event_loop: EventLoop<()>,
 }
 
 impl Gameboy {
     pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
         let event_loop = EventLoop::new().unwrap();
-        let display = Display::new(event_loop);
+        let display = Display::new(&event_loop);
         let cpu = Cpu::new(bootrom, cartridge);
-        Self { cpu, display }
+        Self {
+            cpu,
+            display,
+            event_loop,
+        }
     }
 
-    pub fn run(self) -> Result<()> {
-        self.display.run(self.cpu)?;
-        Ok(())
+    pub fn run(mut self) -> Result<()> {
+        Ok(self.event_loop.run(|event, elwt| {
+            if let Some(display_event) = self.display.process_winit_events(&event) {
+                match display_event {
+                    DisplayEvent::RedrawRequested => {
+                        if let Err(e) = self.display.draw_frame(&mut self.cpu) {
+                            println!("{e:?}");
+                            elwt.exit();
+                        }
+                    }
+                    DisplayEvent::Hotkey((hotkey, pressed)) => match hotkey {
+                        Hotkey::Joypad(button) => {
+                            self.cpu.joypad_mut().update_button(button, pressed)
+                        }
+                        Hotkey::ToggleFrameLimiter => {
+                            if pressed {
+                                self.display.toggle_frame_limiter()
+                            }
+                        }
+                    },
+                    DisplayEvent::Quit => elwt.exit(),
+                }
+            }
+        })?)
     }
 }
