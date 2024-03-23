@@ -283,11 +283,11 @@ impl Ppu {
         let y = self.SCY.wrapping_add(self.LY);
         for tile in 0..32 {
             let tile_row = self.get_tile_row(tilemap, y, tile);
-            for col in 0..8 {
-                let x = (8 * tile + col as u8).wrapping_sub(self.SCX) as usize;
+            for (i, &color) in tile_row.iter().enumerate() {
+                let x = (8 * tile + i as u8).wrapping_sub(self.SCX) as usize;
                 if x < 160 {
                     self.viewport[self.LY as usize][x] = Pixel {
-                        color: tile_row[col],
+                        color,
                         palette: self.BGP,
                     };
                 }
@@ -300,12 +300,12 @@ impl Ppu {
         let mut window_visible = false;
         for tile in 0..32 {
             let tile_row = self.get_tile_row(tilemap, self.WC, tile);
-            for col in 0..8 {
-                let x = 8 * tile as usize + col + self.WX as usize - 7;
+            for (i, &color) in tile_row.iter().enumerate() {
+                let x = 8 * tile as usize + i + self.WX as usize - 7;
                 if x < 160 {
                     window_visible = true;
                     self.viewport[self.LY as usize][x] = Pixel {
-                        color: tile_row[col],
+                        color,
                         palette: self.BGP,
                     };
                 }

@@ -43,6 +43,7 @@ impl Mapper for MBC1 {
 
     fn write(&mut self, addr: u16, val: u8) {
         match addr {
+            0x0000..=0x1fff => {}
             0x2000..=0x3fff => {
                 let val = val & 0x1f;
                 self.bank1 = if val != 0 {
@@ -55,7 +56,8 @@ impl Mapper for MBC1 {
                 self.bank2 = val & 0b11;
             }
             0x6000..=0x7fff => self.mode = val != 0,
-            _ => panic!("MBC1 write: ${addr:04x} = {val:02x}"),
+            0xa000..=0xbfff => {}
+            _ => unreachable!(),
         }
     }
 }
@@ -118,7 +120,7 @@ impl Mapper for MBC1Ram {
                     self.ram[ram_addr] = val
                 }
             }
-            _ => panic!("MBC1+Ram write: ${addr:04x} = {val:02x}"),
+            _ => unreachable!(),
         }
     }
 }

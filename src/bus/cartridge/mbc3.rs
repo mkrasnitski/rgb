@@ -68,13 +68,20 @@ impl Mapper for MBC3Ram {
         match addr {
             0x0000..=0x1fff => self.ram_enabled = (val & 0xf) == 0xA,
             0x2000..=0x3fff => self.mbc3.write(addr, val),
-            0x4000..=0x5fff => self.ram_bank = val & 0b11,
+            0x4000..=0x5fff => {
+                if val <= 0x03 {
+                    self.ram_bank = val & 0b11;
+                } else {
+                    panic!("Invalid MBC3 ram bank: {val:02x}")
+                }
+            }
+            0x6000..=0x7fff => {}
             0xa000..=0xbfff => {
                 if self.ram_enabled {
                     self.ram[self.ram_bank as usize * 0x2000 + addr as usize - 0xa000] = val
                 }
             }
-            _ => panic!("MBC3+Ram Write: ${addr:04x} = {val:02x}"),
+            _ => unreachable!(),
         }
     }
 }

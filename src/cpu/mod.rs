@@ -23,6 +23,7 @@ enum Interrupt {
     VBlank = 0,
     Stat = 1,
     Timer = 2,
+    #[allow(unused)]
     Serial = 3,
     Joypad = 4,
 }

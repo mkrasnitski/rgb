@@ -65,7 +65,6 @@ pub struct MemoryBus {
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
     pub joypad: Joypad,
-    io_ram: Box<[u8; 0x80]>,
     dma_base: u8,
     bootrom_enabled: bool,
     pub int_flag: u8,
@@ -82,7 +81,6 @@ impl MemoryBus {
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
-            io_ram: vec![0; 0x80].try_into().unwrap(),
             dma_base: 0,
             bootrom_enabled: true,
             int_flag: 0xE0,
@@ -99,7 +97,7 @@ impl MemoryBus {
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000],
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000],
             0xfe00..=0xfe9f => self.ppu.read(addr),
-            0xfea0..=0xfeff => panic!("Illegal address read: {addr:04x}"),
+            0xfea0..=0xfeff => 0x00,
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80],
 
             0xff00 => self.joypad.read(),
@@ -111,13 +109,27 @@ impl MemoryBus {
             0xff06 => self.timers.tma,
             0xff07 => self.timers.tac | 0xf8,
 
+            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr),
+
             0xff46 => self.dma_base,
+            0xff50 => 0xff,
 
             0xff0f => self.int_flag | 0xe0,
             0xffff => self.int_enable,
-            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr),
 
-            0xff00..=0xff7f => self.io_ram[addr as usize - 0xff00],
+            // stubs
+            0xff01 => 0x00,
+            0xff02 => 0x7e,
+            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => 0x00,
+
+            // unused on DMG
+            0xff03
+            | 0xff08..=0xff0e
+            | 0xff15
+            | 0xff1f
+            | 0xff27..=0xff2f
+            | 0xff4c..=0xff4f
+            | 0xff51..=0xff7f => 0xff,
         }
     }
 
@@ -129,7 +141,7 @@ impl MemoryBus {
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000] = val,
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000] = val,
             0xfe00..=0xfe9f => self.ppu.write(addr, val),
-            0xfea0..=0xfeff => panic!("Illegal address write: {addr:04x}"),
+            0xfea0..=0xfeff => {}
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80] = val,
 
             0xff00 => self.joypad.write(val),
@@ -140,6 +152,8 @@ impl MemoryBus {
 
             0xff0f => self.int_flag = val | 0xE0,
             0xffff => self.int_enable = val,
+
+            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
 
             0xff46 => {
                 // All at once rather than one byte per cycle (160 total), and no lockout
@@ -157,9 +171,18 @@ impl MemoryBus {
                 }
             }
 
-            0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
+            // stubs
+            0xff01 | 0xff02 => {}
+            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {}
 
-            0xff00..=0xff7f => self.io_ram[addr as usize - 0xff00] = val,
+            // unused on DMG
+            0xff03
+            | 0xff08..=0xff0e
+            | 0xff15
+            | 0xff1f
+            | 0xff27..=0xff2f
+            | 0xff4c..=0xff4f
+            | 0xff51..=0xff7f => {}
         }
     }
 
