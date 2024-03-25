@@ -30,10 +30,10 @@ pub struct Display<const W: u32, const H: u32> {
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
-    pub fn new(event_loop: &EventLoop<()>) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap) -> Self {
         Self {
             window: Window::new(event_loop),
-            keymap: KeyMap::new(),
+            keymap,
         }
     }
 

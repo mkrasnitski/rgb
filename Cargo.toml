@@ -10,5 +10,7 @@ anyhow = "1.0.69"
 enum-primitive-derive = "^0.1"
 num-traits = "^0.1"
 pixels = { git = "https://github.com/mkrasnitski/pixels", branch = "bump-wgpu-winit" }
+serde = { version = "1.0.197", features = ["derive"] }
 spin_sleep_util = "0.1.1"
+toml = "0.8.10"
 winit = "0.29.4"

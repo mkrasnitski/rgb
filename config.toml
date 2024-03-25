@@ -1,0 +1,14 @@
+bootrom = "dmg_boot.bin"
+
+[hotkeys.joypad]
+up = "up"
+down = "down"
+left = "left"
+right = "right"
+a = "x"
+b = "z"
+start = "enter"
+select = "tab"
+
+[hotkeys.emu]
+toggle_frame_limiter = "space"
