@@ -1,11 +1,24 @@
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::hotkeys::{KeyMap, Keybindings};
 
 use anyhow::Result;
+use clap::Parser;
 use serde::Deserialize;
+
+#[derive(Parser)]
+pub struct Args {
+    #[arg(id = "rom-path", hide = true)]
+    pub cartridge: PathBuf,
+
+    #[arg(long)]
+    pub skip_bootrom: bool,
+
+    #[arg(short, long, help = "Enable debug logs")]
+    pub debug: bool,
+}
 
 #[derive(Deserialize)]
 pub struct Config {

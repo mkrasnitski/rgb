@@ -16,6 +16,7 @@ pub struct Cpu {
     cycles: u64,
     ime: bool,
     halted: bool,
+    debug: bool,
 }
 
 enum Interrupt {
@@ -27,14 +28,45 @@ enum Interrupt {
 }
 
 impl Cpu {
-    pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
-        Self {
+    pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>, skip_bootrom: bool, debug: bool) -> Self {
+        let mut cpu = Self {
             memory: MemoryBus::new(bootrom, cartridge),
             registers: Registers::default(),
             cycles: 0,
             ime: false,
             halted: false,
+            debug,
+        };
+
+        if skip_bootrom {
+            cpu.registers.write(RegWrite::AF(0x01b0));
+            cpu.registers.write(RegWrite::BC(0x0013));
+            cpu.registers.write(RegWrite::DE(0x00d8));
+            cpu.registers.write(RegWrite::HL(0x004d));
+            cpu.registers.write(RegWrite::SP(0xfffe));
+            cpu.registers.pc = 0x100;
+            cpu.memory.write(0xff10, 0x80);
+            cpu.memory.write(0xff11, 0xbf);
+            cpu.memory.write(0xff12, 0xf3);
+            cpu.memory.write(0xff14, 0xbf);
+            cpu.memory.write(0xff16, 0x3f);
+            cpu.memory.write(0xff19, 0xbf);
+            cpu.memory.write(0xff1a, 0x7f);
+            cpu.memory.write(0xff1b, 0xff);
+            cpu.memory.write(0xff1c, 0x9f);
+            cpu.memory.write(0xff1e, 0xbf);
+            cpu.memory.write(0xff20, 0xff);
+            cpu.memory.write(0xff23, 0xbf);
+            cpu.memory.write(0xff24, 0x77);
+            cpu.memory.write(0xff25, 0xf3);
+            cpu.memory.write(0xff26, 0xf1);
+            cpu.memory.write(0xff40, 0x91);
+            cpu.memory.write(0xff47, 0xfc);
+            cpu.memory.write(0xff48, 0xff);
+            cpu.memory.write(0xff49, 0xff);
+            cpu.memory.write(0xff50, 0x01);
         }
+        cpu
     }
 
     pub fn run_frame(&mut self) -> Result<()> {
@@ -53,8 +85,7 @@ impl Cpu {
         } else {
             let instr = self.decode_instr()?;
             let len = instr.length() as u16;
-            #[cfg(debug_assertions)]
-            {
+            if self.debug {
                 let bytes = {
                     (self.registers.pc..self.registers.pc + len)
                         .map(|addr| format!("{:02x}", self.memory.read(addr)))

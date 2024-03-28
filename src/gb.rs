@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{Args, Config};
 use crate::cpu::Cpu;
 use crate::display::{Display, DisplayEvent};
 use crate::hotkeys::Hotkey;
@@ -15,13 +15,14 @@ pub struct Gameboy {
 }
 
 impl Gameboy {
-    pub fn new(cartridge: Vec<u8>, config: Config) -> Result<Self> {
+    pub fn new(args: Args, config: Config) -> Result<Self> {
         let event_loop = EventLoop::new().unwrap();
         let display = Display::new(&event_loop, config.keymap());
         let bootrom = std::fs::read(config.bootrom)?
             .try_into()
             .expect("Bootrom not 0x100 in length");
-        let cpu = Cpu::new(bootrom, cartridge);
+        let cartridge = std::fs::read(args.cartridge)?;
+        let cpu = Cpu::new(bootrom, cartridge, args.skip_bootrom, args.debug);
         Ok(Self {
             cpu,
             display,

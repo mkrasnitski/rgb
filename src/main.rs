@@ -7,13 +7,15 @@ mod hotkeys;
 mod ppu;
 mod utils;
 
+use config::{Args, Config};
+use gb::Gameboy;
+
 use anyhow::Result;
-use std::env;
+use clap::Parser;
 
 fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-    let config = config::Config::new("config.toml".as_ref())?;
-    let cartridge = std::fs::read(&args[1])?;
-    let gb = gb::Gameboy::new(cartridge, config)?;
+    let args = Args::parse();
+    let config = Config::new("config.toml".as_ref())?;
+    let gb = Gameboy::new(args, config)?;
     gb.run()
 }
