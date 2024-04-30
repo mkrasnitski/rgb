@@ -66,6 +66,7 @@ pub struct MemoryBus {
     pub timers: Timers,
     pub joypad: Joypad,
     io_ram: Box<[u8; 0x80]>,
+    dma_base: u8,
     bootrom_enabled: bool,
     pub int_flag: u8,
     pub int_enable: u8,
@@ -82,6 +83,7 @@ impl MemoryBus {
             timers: Timers::default(),
             joypad: Joypad::default(),
             io_ram: vec![0; 0x80].try_into().unwrap(),
+            dma_base: 0,
             bootrom_enabled: true,
             int_flag: 0xE0,
             int_enable: 0,
@@ -108,6 +110,8 @@ impl MemoryBus {
             0xff05 => self.timers.tima,
             0xff06 => self.timers.tma,
             0xff07 => self.timers.tac | 0xf8,
+
+            0xff46 => self.dma_base,
 
             0xff0f => self.int_flag | 0xe0,
             0xffff => self.int_enable,
@@ -137,6 +141,16 @@ impl MemoryBus {
             0xff0f => self.int_flag = val | 0xE0,
             0xffff => self.int_enable = val,
 
+            0xff46 => {
+                // All at once rather than one byte per cycle (160 total), and no lockout
+                self.dma_base = val;
+                for i in 0..0xa0 {
+                    self.ppu.write(
+                        0xfe00 + i as u16,
+                        self.read(u16::from_be_bytes([self.dma_base, i])),
+                    )
+                }
+            }
             0xff50 => {
                 if self.bootrom_enabled && val & 1 == 1 {
                     self.bootrom_enabled = false;

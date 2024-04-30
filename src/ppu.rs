@@ -26,10 +26,41 @@ pub struct Ppu {
 
     mode: PpuMode,
     stat_condition: bool,
-    viewport: Box<[[u8; 160]; 144]>,
+    viewport: Box<[[Pixel; 160]; 144]>,
+    oam_sprites: Vec<Sprite>,
     cycles: u16,
     ticks: u16,
     pub draw: bool,
+}
+
+struct Sprite {
+    tile: u8,
+    x: u8,
+    y: u8,
+    priority: bool,
+    x_flip: bool,
+    y_flip: bool,
+    palette: bool,
+}
+
+impl Sprite {
+    fn from_oam_data(data: [u8; 4]) -> Self {
+        Self {
+            tile: data[2],
+            x: data[1],
+            y: data[0],
+            priority: data[3].bit(7),
+            x_flip: data[3].bit(5),
+            y_flip: data[3].bit(6),
+            palette: data[3].bit(4),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Default)]
+struct Pixel {
+    color: u8,
+    palette: u8,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -61,7 +92,8 @@ impl Ppu {
 
             mode: PpuMode::HBlank,
             stat_condition: false,
-            viewport: Box::new([[0; 160]; 144]),
+            viewport: Box::new([[Pixel::default(); 160]; 144]),
+            oam_sprites: Vec::with_capacity(10),
             cycles: 0,
             ticks: 0,
             draw: false,
@@ -145,7 +177,20 @@ impl Ppu {
 
         if scanline < 144 {
             if clocks == 0 {
+                self.oam_sprites.clear();
                 self.set_mode(PpuMode::OamScan);
+                // All at once rather than two sprites per cycle
+                for i in 0..40 {
+                    if self.oam_sprites.len() < 10 {
+                        if let Some(sprite) = self.fetch_sprite(i) {
+                            let idx = self
+                                .oam_sprites
+                                .binary_search_by(|s| sprite.x.cmp(&s.x))
+                                .unwrap_or_else(|e| e);
+                            self.oam_sprites.insert(idx, sprite);
+                        };
+                    }
+                }
             } else if clocks == 20 {
                 self.set_mode(PpuMode::Drawing);
                 self.draw_line();
@@ -204,9 +249,8 @@ impl Ppu {
     pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
             let color = if self.LCDC.bit(7) {
-                let i = idx / 160;
-                let j = idx % 160;
-                match (self.BGP >> (2 * self.viewport[i][j])) & 0b11 {
+                let pixel = self.viewport[idx / 160][idx % 160];
+                match (pixel.palette >> (2 * pixel.color)) & 0b11 {
                     0 => WHITE,
                     1 => LIGHT_GRAY,
                     2 => DARK_GRAY,
@@ -229,6 +273,9 @@ impl Ppu {
                 self.draw_win_line();
             }
         }
+        if self.LCDC.bit(1) {
+            self.draw_sprite_line();
+        }
     }
 
     fn draw_bg_line(&mut self) {
@@ -239,7 +286,10 @@ impl Ppu {
             for col in 0..8 {
                 let x = (8 * tile + col as u8).wrapping_sub(self.SCX) as usize;
                 if x < 160 {
-                    self.viewport[self.LY as usize][x] = tile_row[col];
+                    self.viewport[self.LY as usize][x] = Pixel {
+                        color: tile_row[col],
+                        palette: self.BGP,
+                    };
                 }
             }
         }
@@ -254,7 +304,10 @@ impl Ppu {
                 let x = 8 * tile as usize + col + self.WX as usize - 7;
                 if x < 160 {
                     window_visible = true;
-                    self.viewport[self.LY as usize][x] = tile_row[col];
+                    self.viewport[self.LY as usize][x] = Pixel {
+                        color: tile_row[col],
+                        palette: self.BGP,
+                    };
                 }
             }
         }
@@ -263,14 +316,48 @@ impl Ppu {
         }
     }
 
+    fn draw_sprite_line(&mut self) {
+        let height = if self.LCDC.bit(2) { 16 } else { 8 };
+        for sprite in &self.oam_sprites {
+            let mut row = self.LY + 16 - sprite.y;
+            if sprite.y_flip {
+                row = height - row - 1;
+            }
+            let palette = if sprite.palette { self.OBP1 } else { self.OBP0 };
+            let tile = sprite.tile & (0xFF - height / 8 + 1);
+            let tile_row = self.decode_tile_row(tile, row, true);
+
+            let scanline = &mut self.viewport[self.LY as usize];
+            for i in 0..8 {
+                let col = if sprite.x_flip { 7 - i } else { i };
+                let color = tile_row[col];
+                let x = (sprite.x + i as u8).wrapping_sub(8);
+                if x < 160 && color != 0 && (!sprite.priority || scanline[x as usize].color == 0) {
+                    scanline[x as usize] = Pixel { color, palette };
+                }
+            }
+        }
+    }
+
+    fn fetch_sprite(&self, idx: usize) -> Option<Sprite> {
+        let sprite_height = if self.LCDC.bit(2) { 16 } else { 8 };
+        let sprite = Sprite::from_oam_data(self.oam_ram[4 * idx..4 * idx + 4].try_into().unwrap());
+        let y = self.LY + 16;
+        if sprite.x > 0 && (sprite.y..sprite.y + sprite_height).contains(&y) {
+            Some(sprite)
+        } else {
+            None
+        }
+    }
+
     fn get_tile_row(&self, tilemap_bit: bool, line: u8, tile: u8) -> [u8; 8] {
         let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
         let tile_num = self.read(tilemap + 32 * (line as u16 / 8) + tile as u16);
-        self.decode_tile_row(tile_num, line % 8)
+        self.decode_tile_row(tile_num, line % 8, false)
     }
 
-    fn decode_tile_row(&self, tile_num: u8, row_num: u8) -> [u8; 8] {
-        let tile_addr = match self.LCDC.bit(4) {
+    fn decode_tile_row(&self, tile_num: u8, row_num: u8, is_sprite: bool) -> [u8; 8] {
+        let tile_addr = match self.LCDC.bit(4) || is_sprite {
             true => 0x8000 + 16 * tile_num as u16,
             false => 0x9000u16.wrapping_add_signed(16 * tile_num as i8 as i16),
         };
