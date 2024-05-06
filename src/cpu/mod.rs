@@ -129,6 +129,7 @@ impl Cpu {
         if self.memory.timers.increment() {
             self.request_interrupt(Interrupt::Timer);
         }
+        self.memory.cartridge.increment_rtc();
         if self.memory.joypad.poll() {
             self.request_interrupt(Interrupt::Joypad);
         }

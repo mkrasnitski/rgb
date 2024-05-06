@@ -59,7 +59,7 @@ impl Timers {
 
 pub struct MemoryBus {
     bootrom: [u8; 0x100],
-    cartridge: Cartridge,
+    pub cartridge: Cartridge,
     ppu: Ppu,
     wram: Box<[u8; 0x2000]>,
     hram: Box<[u8; 0x7f]>,

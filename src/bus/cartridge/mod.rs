@@ -2,11 +2,13 @@ mod mbc1;
 mod mbc3;
 
 use mbc1::{MBC1Ram, MBC1};
-use mbc3::{MBC3Ram, MBC3};
+use mbc3::{MBC3Ram, MBC3RamRtc, MBC3Rtc, MBC3};
 
 trait Mapper {
     fn read(&self, addr: u16) -> u8;
     fn write(&mut self, addr: u16, val: u8);
+
+    fn increment_rtc(&mut self) {}
 }
 
 struct NoMapper {
@@ -51,6 +53,8 @@ impl Cartridge {
             }),
             0x01 => Box::new(MBC1::new(rom, num_banks)),
             0x02 | 0x03 => Box::new(MBC1Ram::new(rom, num_banks, 1024 * ram_size_kb)),
+            0x0f => Box::new(MBC3Rtc::new(rom)),
+            0x10 => Box::new(MBC3RamRtc::new(rom, 1024 * ram_size_kb)),
             0x11 => Box::new(MBC3::new(rom)),
             0x12 | 0x13 => Box::new(MBC3Ram::new(rom, 1024 * ram_size_kb)),
             _ => panic!("Invalid mapper value: {mbc:02x}"),
@@ -64,5 +68,9 @@ impl Cartridge {
 
     pub fn write(&mut self, addr: u16, val: u8) {
         self.mapper.write(addr, val);
+    }
+
+    pub fn increment_rtc(&mut self) {
+        self.mapper.increment_rtc()
     }
 }
