@@ -133,6 +133,14 @@ impl MemoryBus {
         }
     }
 
+    // During DMA, the entire region E000-FFFF is treated as echo ram, instead of E000-FDFF
+    fn read_dma(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0xdfff => self.read(addr),
+            0xe000..=0xffff => self.wram[addr as usize - 0xe000],
+        }
+    }
+
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => self.cartridge.write(addr, val),
@@ -159,10 +167,8 @@ impl MemoryBus {
                 // All at once rather than one byte per cycle (160 total), and no lockout
                 self.dma_base = val;
                 for i in 0..0xa0 {
-                    self.ppu.write(
-                        0xfe00 + i as u16,
-                        self.read(u16::from_be_bytes([self.dma_base, i])),
-                    )
+                    self.ppu
+                        .write_dma(i, self.read_dma(u16::from_be_bytes([self.dma_base, i])))
                 }
             }
             0xff50 => {

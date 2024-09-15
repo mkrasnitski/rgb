@@ -102,8 +102,14 @@ impl Ppu {
 
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
-            0x8000..=0x9fff => self.vram[addr as usize - 0x8000],
-            0xfe00..=0xfe9f => self.oam_ram[addr as usize - 0xfe00],
+            0x8000..=0x9fff => match self.mode {
+                PpuMode::Drawing => 0xff,
+                _ => self.read_vram(addr),
+            },
+            0xfe00..=0xfe9f => match self.mode {
+                PpuMode::OamScan | PpuMode::Drawing => 0xff,
+                _ => self.oam_ram[addr as usize - 0xfe00],
+            },
             0xff40 => self.LCDC,
             0xff41 => self.STAT,
             0xff42 => self.SCY,
@@ -119,10 +125,20 @@ impl Ppu {
         }
     }
 
+    fn read_vram(&self, idx: u16) -> u8 {
+        self.vram[idx as usize - 0x8000]
+    }
+
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
-            0x8000..=0x9fff => self.vram[addr as usize - 0x8000] = val,
-            0xfe00..=0xfe9f => self.oam_ram[addr as usize - 0xfe00] = val,
+            0x8000..=0x9fff => match self.mode {
+                PpuMode::Drawing => {}
+                _ => self.vram[addr as usize - 0x8000] = val,
+            },
+            0xfe00..=0xfe9f => match self.mode {
+                PpuMode::OamScan | PpuMode::Drawing => {}
+                _ => self.oam_ram[addr as usize - 0xfe00] = val,
+            },
             0xff40 => self.LCDC = val,
             0xff41 => {
                 self.STAT &= 0b10000111; // Clear writeable bits
@@ -139,6 +155,10 @@ impl Ppu {
             0xff4b => self.WX = val,
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#02x}"),
         }
+    }
+
+    pub fn write_dma(&mut self, oam_slot: u8, val: u8) {
+        self.oam_ram[oam_slot as usize] = val
     }
 
     pub fn step(&mut self) -> (bool, bool) {
@@ -352,7 +372,7 @@ impl Ppu {
 
     fn get_tile_row(&self, tilemap_bit: bool, line: u8, tile: u8) -> [u8; 8] {
         let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
-        let tile_num = self.read(tilemap + 32 * (line as u16 / 8) + tile as u16);
+        let tile_num = self.read_vram(tilemap + 32 * (line as u16 / 8) + tile as u16);
         self.decode_tile_row(tile_num, line % 8, false)
     }
 
@@ -363,8 +383,8 @@ impl Ppu {
         };
         let row_addr = tile_addr + 2 * row_num as u16;
 
-        let hi = self.read(row_addr + 1);
-        let lo = self.read(row_addr);
+        let hi = self.read_vram(row_addr + 1);
+        let lo = self.read_vram(row_addr);
 
         let mut row = [0; 8];
         for col in 0..8 {
