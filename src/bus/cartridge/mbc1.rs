@@ -117,7 +117,9 @@ impl Mapper for MBC1Ram {
             0xa000..=0xbfff => {
                 if self.ram_enabled {
                     let ram_addr = self.ram_bank() * 0x2000 + addr as usize - 0xa000;
-                    self.ram[ram_addr] = val
+                    if ram_addr < self.ram.len() {
+                        self.ram[ram_addr] = val
+                    }
                 }
             }
             _ => unreachable!(),
