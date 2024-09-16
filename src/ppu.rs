@@ -214,7 +214,7 @@ impl Ppu {
             } else if clocks == 20 {
                 self.set_mode(PpuMode::Drawing);
                 self.draw_line();
-            } else if clocks == 43 {
+            } else if clocks == 63 {
                 self.set_mode(PpuMode::HBlank);
             }
         } else if scanline == 144 && clocks == 0 {
