@@ -17,7 +17,7 @@ pub struct Gameboy {
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
         let event_loop = EventLoop::new().unwrap();
-        let display = Display::new(&event_loop, config.keymap());
+        let display = Display::new(&event_loop, config.keymap(), args.scale);
         let bootrom = std::fs::read(config.bootrom)?
             .try_into()
             .expect("Bootrom not 0x100 in length");

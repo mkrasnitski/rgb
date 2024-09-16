@@ -18,6 +18,9 @@ pub struct Args {
 
     #[arg(short, long, help = "Enable debug logs")]
     pub debug: bool,
+
+    #[arg(long, help = "Scale factor", default_value = "3")]
+    pub scale: u32,
 }
 
 #[derive(Deserialize)]

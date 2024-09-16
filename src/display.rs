@@ -15,7 +15,6 @@ use winit::{
     window::{Window as WinitWindow, WindowBuilder},
 };
 
-const SCALE: u32 = 3;
 const FRAMERATE: f64 = 4194304.0 / 70224.0;
 
 pub enum DisplayEvent {
@@ -30,9 +29,9 @@ pub struct Display<const W: u32, const H: u32> {
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
-    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap) -> Self {
+    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap, scale_factor: u32) -> Self {
         Self {
-            window: Window::new(event_loop),
+            window: Window::new(event_loop, scale_factor),
             keymap,
         }
     }
@@ -98,14 +97,15 @@ struct Window<const W: u32, const H: u32> {
 }
 
 impl<const W: u32, const H: u32> Window<W, H> {
-    fn new(event_loop: &EventLoop<()>) -> Self {
+    fn new(event_loop: &EventLoop<()>, scale_factor: u32) -> Self {
         event_loop.set_control_flow(ControlFlow::Poll);
-        let size = LogicalSize::new((W * SCALE) as f64, (H * SCALE) as f64);
+        let size = LogicalSize::new((W * scale_factor) as f64, (H * scale_factor) as f64);
         let window = Arc::new(
             WindowBuilder::new()
                 .with_inner_size(size)
                 .with_min_inner_size(size)
                 .with_resizable(false)
+                .with_title("rgb")
                 .build(event_loop)
                 .unwrap(),
         );
