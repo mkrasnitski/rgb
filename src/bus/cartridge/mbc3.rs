@@ -38,9 +38,6 @@ pub struct MBC3Ram {
 
 impl MBC3Ram {
     pub fn new(rom: Vec<u8>, ram_size: u32) -> Self {
-        if ram_size != 0x8000 {
-            panic!("MBC3 ram size not 0x8000");
-        }
         Self {
             mbc3: MBC3::new(rom),
             ram: vec![0; ram_size as usize],
@@ -110,7 +107,7 @@ impl Mapper for MBC3Rtc {
         match addr {
             0x0000..=0x7fff => self.mbc3.read(addr),
             0xa000..=0xbfff => {
-                if self.ram_enabled {
+                if self.ram_enabled && (0x08..=0x0c).contains(&self.rtc_register) {
                     self.rtc.read(self.rtc_register)
                 } else {
                     0xFF
@@ -125,11 +122,7 @@ impl Mapper for MBC3Rtc {
             0x0000..=0x1fff => self.ram_enabled = (val & 0xf) == 0xA,
             0x2000..=0x3fff => self.mbc3.write(addr, val),
             0x4000..=0x5fff => {
-                if (0x08..=0x0c).contains(&val) {
-                    self.rtc_register = val;
-                } else {
-                    panic!("Invalid RTC register: {val:02x}")
-                }
+                self.rtc_register = val;
             }
             0x6000..=0x7fff => {
                 if val == 0 && !self.rtc.prepare_latch {
@@ -140,7 +133,7 @@ impl Mapper for MBC3Rtc {
                 }
             }
             0xa000..=0xbfff => {
-                if self.ram_enabled {
+                if self.ram_enabled && (0x08..=0x0c).contains(&self.rtc_register) {
                     self.rtc.write(self.rtc_register, val)
                 }
             }
@@ -163,9 +156,6 @@ pub struct MBC3RamRtc {
 
 impl MBC3RamRtc {
     pub fn new(rom: Vec<u8>, ram_size: u32) -> Self {
-        if ram_size != 0x8000 {
-            panic!("MBC3 ram size not 0x8000");
-        }
         Self {
             mbc3: MBC3::new(rom),
             ram: vec![0; ram_size as usize],
@@ -182,12 +172,11 @@ impl Mapper for MBC3RamRtc {
             0x0000..=0x7fff => self.mbc3.read(addr),
             0xa000..=0xbfff => {
                 if self.ram_enabled {
-                    match self.register {
-                        0x00..=0x03 => {
-                            self.ram[self.register as usize * 0x2000 + addr as usize - 0xa000]
-                        }
-                        0x08..=0x0c => self.rtc.read(self.register),
-                        _ => unreachable!(),
+                    let reg = self.register & 0xf;
+                    match reg {
+                        0x00..=0x03 => self.ram[reg as usize * 0x2000 + addr as usize - 0xa000],
+                        0x08..=0x0c => self.rtc.read(reg),
+                        _ => 0xFF,
                     }
                 } else {
                     0xFF
@@ -202,11 +191,7 @@ impl Mapper for MBC3RamRtc {
             0x0000..=0x1fff => self.ram_enabled = (val & 0xf) == 0xA,
             0x2000..=0x3fff => self.mbc3.write(addr, val),
             0x4000..=0x5fff => {
-                if val <= 0x03 || (0x08..=0x0c).contains(&val) {
-                    self.register = val;
-                } else {
-                    panic!("Invalid Ram+RTC register: {val:02x}")
-                }
+                self.register = val;
             }
             0x6000..=0x7fff => {
                 if val == 0 && !self.rtc.prepare_latch {
@@ -218,12 +203,13 @@ impl Mapper for MBC3RamRtc {
             }
             0xa000..=0xbfff => {
                 if self.ram_enabled {
-                    match self.register {
+                    let reg = self.register & 0xf;
+                    match reg {
                         0x00..=0x03 => {
-                            self.ram[self.register as usize * 0x2000 + addr as usize - 0xa000] = val
+                            self.ram[reg as usize * 0x2000 + addr as usize - 0xa000] = val
                         }
-                        0x08..=0x0c => self.rtc.write(self.register, val),
-                        _ => unreachable!(),
+                        0x08..=0x0c => self.rtc.write(reg, val),
+                        _ => {}
                     }
                 }
             }
