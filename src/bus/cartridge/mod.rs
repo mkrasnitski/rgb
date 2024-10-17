@@ -1,8 +1,10 @@
 mod mbc1;
+mod mbc2;
 mod mbc3;
 mod mbc5;
 
 use mbc1::{MBC1Ram, MBC1};
+use mbc2::MBC2;
 use mbc3::{MBC3Ram, MBC3RamRtc, MBC3Rtc, MBC3};
 use mbc5::{MBC5Ram, MBC5};
 
@@ -55,6 +57,7 @@ impl Cartridge {
             }),
             0x01 => Box::new(MBC1::new(rom, num_banks)),
             0x02 | 0x03 => Box::new(MBC1Ram::new(rom, num_banks, 1024 * ram_size_kb)),
+            0x05 | 0x06 => Box::new(MBC2::new(rom, num_banks)),
             0x0f => Box::new(MBC3Rtc::new(rom)),
             0x10 => Box::new(MBC3RamRtc::new(rom, 1024 * ram_size_kb)),
             0x11 => Box::new(MBC3::new(rom)),
