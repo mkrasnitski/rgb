@@ -110,7 +110,7 @@ impl Mapper for MBC1Ram {
             0x4000..=0x5fff => {
                 self.mbc1.write(addr, val);
                 if self.mbc1.mode {
-                    let num_ram_banks = ((self.ram.len() + 0x1fff) / 0x2000) as u8;
+                    let num_ram_banks = self.ram.len().div_ceil(0x2000) as u8;
                     self.ram_bank = (val & 0b11) % num_ram_banks;
                 }
             }
@@ -118,7 +118,7 @@ impl Mapper for MBC1Ram {
                 if self.ram_enabled {
                     let ram_addr = self.ram_bank() * 0x2000 + addr as usize - 0xa000;
                     if ram_addr < self.ram.len() {
-                        self.ram[ram_addr] = val
+                        self.ram[ram_addr] = val;
                     }
                 }
             }

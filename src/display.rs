@@ -74,13 +74,13 @@ impl<const W: u32, const H: u32> Display<W, H> {
                     Some(DisplayEvent::Quit)
                 } else {
                     self.keymap
-                        .get_hotkey(&keycode)
+                        .get_hotkey(keycode)
                         .map(|hotkey| DisplayEvent::Hotkey((hotkey, true)))
                 }
             }
             ElementState::Released => self
                 .keymap
-                .get_hotkey(&keycode)
+                .get_hotkey(keycode)
                 .map(|hotkey| DisplayEvent::Hotkey((hotkey, false))),
         }
     }

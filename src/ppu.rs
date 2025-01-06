@@ -158,7 +158,7 @@ impl Ppu {
     }
 
     pub fn write_dma(&mut self, oam_slot: u8, val: u8) {
-        self.oam_ram[oam_slot as usize] = val
+        self.oam_ram[oam_slot as usize] = val;
     }
 
     pub fn step(&mut self) -> (bool, bool) {
@@ -377,12 +377,13 @@ impl Ppu {
     }
 
     fn decode_tile_row(&self, tile_num: u8, row_num: u8, is_sprite: bool) -> [u8; 8] {
-        let tile_addr = match self.LCDC.bit(4) || is_sprite {
-            true => 0x8000 + 16 * tile_num as u16,
-            false => 0x9000u16.wrapping_add_signed(16 * tile_num as i8 as i16),
+        let tile_addr = if self.LCDC.bit(4) || is_sprite {
+            0x8000 + 16 * tile_num as u16
+        } else {
+            0x9000u16.wrapping_add_signed(16 * tile_num as i8 as i16)
         };
-        let row_addr = tile_addr + 2 * row_num as u16;
 
+        let row_addr = tile_addr + 2 * row_num as u16;
         let hi = self.read_vram(row_addr + 1);
         let lo = self.read_vram(row_addr);
 

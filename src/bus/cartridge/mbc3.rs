@@ -76,7 +76,7 @@ impl Mapper for MBC3Ram {
             0x6000..=0x7fff => {}
             0xa000..=0xbfff => {
                 if self.ram_enabled {
-                    self.ram[self.ram_bank as usize * 0x2000 + addr as usize - 0xa000] = val
+                    self.ram[self.ram_bank as usize * 0x2000 + addr as usize - 0xa000] = val;
                 }
             }
             _ => unreachable!(),
@@ -134,7 +134,7 @@ impl Mapper for MBC3Rtc {
             }
             0xa000..=0xbfff => {
                 if self.ram_enabled && (0x08..=0x0c).contains(&self.rtc_register) {
-                    self.rtc.write(self.rtc_register, val)
+                    self.rtc.write(self.rtc_register, val);
                 }
             }
             _ => unreachable!(),
@@ -142,7 +142,7 @@ impl Mapper for MBC3Rtc {
     }
 
     fn increment_rtc(&mut self) {
-        self.rtc.increment()
+        self.rtc.increment();
     }
 }
 
@@ -206,7 +206,7 @@ impl Mapper for MBC3RamRtc {
                     let reg = self.register & 0xf;
                     match reg {
                         0x00..=0x03 => {
-                            self.ram[reg as usize * 0x2000 + addr as usize - 0xa000] = val
+                            self.ram[reg as usize * 0x2000 + addr as usize - 0xa000] = val;
                         }
                         0x08..=0x0c => self.rtc.write(reg, val),
                         _ => {}
@@ -218,7 +218,7 @@ impl Mapper for MBC3RamRtc {
     }
 
     fn increment_rtc(&mut self) {
-        self.rtc.increment()
+        self.rtc.increment();
     }
 }
 

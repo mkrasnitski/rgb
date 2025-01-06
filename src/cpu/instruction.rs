@@ -281,7 +281,7 @@ impl Instruction {
             Add(src) | Adc(src) | Sub(src) | Sbc(src) | And(src) | Xor(src) | Or(src) | Cp(src) => {
                 Const(match src {
                     AluSrc::R8(R8::HLInd) | AluSrc::Imm(_) => 2,
-                    _ => 1,
+                    AluSrc::R8(_) => 1,
                 })
             }
 

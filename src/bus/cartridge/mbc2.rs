@@ -48,7 +48,7 @@ impl Mapper for MBC2 {
                         1
                     }
                 } else {
-                    self.ram_enabled = (val & 0xf) == 0xA
+                    self.ram_enabled = (val & 0xf) == 0xA;
                 }
             }
             0x4000..=0x7fff => {}

@@ -78,6 +78,6 @@ impl Cartridge {
     }
 
     pub fn increment_rtc(&mut self) {
-        self.mapper.increment_rtc()
+        self.mapper.increment_rtc();
     }
 }

@@ -42,11 +42,11 @@ impl Gameboy {
                     }
                     DisplayEvent::Hotkey((hotkey, pressed)) => match hotkey {
                         Hotkey::Joypad(button) => {
-                            self.cpu.joypad_mut().update_button(button, pressed)
+                            self.cpu.joypad_mut().update_button(button, pressed);
                         }
                         Hotkey::ToggleFrameLimiter => {
                             if pressed {
-                                self.display.toggle_frame_limiter()
+                                self.display.toggle_frame_limiter();
                             }
                         }
                     },

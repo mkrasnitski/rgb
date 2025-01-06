@@ -29,8 +29,8 @@ impl KeyMap {
         }
     }
 
-    pub fn get_hotkey(&self, key: &WinitKeyCode) -> Option<Hotkey> {
-        self.map.get(key).copied()
+    pub fn get_hotkey(&self, key: WinitKeyCode) -> Option<Hotkey> {
+        self.map.get(&key).copied()
     }
 }
 

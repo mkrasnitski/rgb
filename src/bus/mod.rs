@@ -168,7 +168,7 @@ impl MemoryBus {
                 self.dma_base = val;
                 for i in 0..0xa0 {
                     self.ppu
-                        .write_dma(i, self.read_dma(u16::from_be_bytes([self.dma_base, i])))
+                        .write_dma(i, self.read_dma(u16::from_be_bytes([self.dma_base, i])));
                 }
             }
             0xff50 => {
