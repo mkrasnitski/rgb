@@ -16,8 +16,8 @@ pub struct Gameboy {
 
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
-        let event_loop = EventLoop::new().unwrap();
-        let display = Display::new(&event_loop, config.keymap(), args.scale);
+        let event_loop = EventLoop::new()?;
+        let display = Display::new(&event_loop, config.keymap(), args.scale)?;
         let bootrom = std::fs::read(config.bootrom)?
             .try_into()
             .expect("Bootrom not 0x100 in length");
@@ -32,7 +32,7 @@ impl Gameboy {
 
     pub fn run(mut self) -> Result<()> {
         Ok(self.event_loop.run(|event, elwt| {
-            if let Some(display_event) = self.display.process_winit_events(&event) {
+            if let Some(display_event) = self.display.process_event(&event) {
                 match display_event {
                     DisplayEvent::RedrawRequested => {
                         if let Err(e) = self.display.draw_frame(&mut self.cpu) {

@@ -24,44 +24,48 @@ pub enum DisplayEvent {
 }
 
 pub struct Display<const W: u32, const H: u32> {
-    window: Window<W, H>,
+    surface: Surface<W, H>,
     keymap: KeyMap,
+    frame_limiter: FrameLimiter,
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
-    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap, scale_factor: u32) -> Self {
-        Self {
-            window: Window::new(event_loop, scale_factor),
+    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap, scale_factor: u32) -> Result<Self> {
+        Ok(Self {
+            surface: Surface::new(event_loop, scale_factor)?,
             keymap,
-        }
+            frame_limiter: FrameLimiter {
+                limit_framerate: true,
+                frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
+                frame_time: None,
+                instant: Instant::now(),
+            },
+        })
     }
 
     pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
-        self.window.frame_limiter.run(|| cpu.run_frame())?;
-        cpu.ppu_mut().render(&mut self.window.pixels)?;
-        self.window.frame_limiter.tick();
+        self.frame_limiter.run(|| cpu.run_frame())?;
+        cpu.ppu_mut().render(&mut self.surface.pixels)?;
+        self.frame_limiter.tick();
         Ok(())
     }
 
-    pub fn process_winit_events(&mut self, event: &WinitEvent<()>) -> Option<DisplayEvent> {
-        match event {
-            WinitEvent::AboutToWait => {
-                self.window.window.request_redraw();
-            }
-            WinitEvent::WindowEvent { event, .. } => match event {
-                WindowEvent::RedrawRequested => return Some(DisplayEvent::RedrawRequested),
-                WindowEvent::CloseRequested | WindowEvent::Destroyed => {
-                    return Some(DisplayEvent::Quit)
-                }
-                WindowEvent::KeyboardInput { event, .. } => return self.handle_keyevent(event),
-                _ => {}
-            },
-            _ => {}
+    pub fn process_event(&mut self, event: &WinitEvent<()>) -> Option<DisplayEvent> {
+        let WinitEvent::WindowEvent { event, .. } = event else {
+            return None;
         };
-        None
+        match event {
+            WindowEvent::RedrawRequested => {
+                self.surface.window.request_redraw();
+                Some(DisplayEvent::RedrawRequested)
+            }
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => Some(DisplayEvent::Quit),
+            WindowEvent::KeyboardInput { event, .. } => self.process_keyevent(event),
+            _ => None,
+        }
     }
 
-    pub fn handle_keyevent(&mut self, event: &KeyEvent) -> Option<DisplayEvent> {
+    pub fn process_keyevent(&mut self, event: &KeyEvent) -> Option<DisplayEvent> {
         let PhysicalKey::Code(keycode) = event.physical_key else {
             return None;
         };
@@ -86,18 +90,17 @@ impl<const W: u32, const H: u32> Display<W, H> {
     }
 
     pub fn toggle_frame_limiter(&mut self) {
-        self.window.frame_limiter.limit_framerate = !self.window.frame_limiter.limit_framerate;
+        self.frame_limiter.limit_framerate = !self.frame_limiter.limit_framerate;
     }
 }
 
-struct Window<const W: u32, const H: u32> {
+struct Surface<const W: u32, const H: u32> {
     window: Arc<WinitWindow>,
     pixels: Pixels<'static>,
-    frame_limiter: FrameLimiter,
 }
 
-impl<const W: u32, const H: u32> Window<W, H> {
-    fn new(event_loop: &EventLoop<()>, scale_factor: u32) -> Self {
+impl<const W: u32, const H: u32> Surface<W, H> {
+    fn new(event_loop: &EventLoop<()>, scale_factor: u32) -> Result<Self> {
         event_loop.set_control_flow(ControlFlow::Poll);
         let size = LogicalSize::new((W * scale_factor) as f64, (H * scale_factor) as f64);
         let window = Arc::new(
@@ -106,8 +109,7 @@ impl<const W: u32, const H: u32> Window<W, H> {
                 .with_min_inner_size(size)
                 .with_resizable(false)
                 .with_title("rgb")
-                .build(event_loop)
-                .unwrap(),
+                .build(event_loop)?,
         );
 
         let pixels = {
@@ -117,19 +119,10 @@ impl<const W: u32, const H: u32> Window<W, H> {
                 physical_window_size.height,
                 Arc::clone(&window),
             );
-            Pixels::new(W, H, surface_texture).unwrap()
+            Pixels::new(W, H, surface_texture)?
         };
 
-        Self {
-            window,
-            pixels,
-            frame_limiter: FrameLimiter {
-                limit_framerate: true,
-                frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
-                frame_time: None,
-                instant: Instant::now(),
-            },
-        }
+        Ok(Self { window, pixels })
     }
 }
 
