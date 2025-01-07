@@ -9,10 +9,10 @@ use pixels::{Pixels, SurfaceTexture};
 use spin_sleep_util::Interval;
 use winit::{
     dpi::LogicalSize,
-    event::{ElementState, Event as WinitEvent, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event::{ElementState, KeyEvent, WindowEvent},
+    event_loop::{ActiveEventLoop, ControlFlow},
     keyboard::{KeyCode, PhysicalKey},
-    window::{Window as WinitWindow, WindowBuilder},
+    window::Window,
 };
 
 const FRAMERATE: f64 = 4194304.0 / 70224.0;
@@ -24,45 +24,53 @@ pub enum DisplayEvent {
 }
 
 pub struct Display<const W: u32, const H: u32> {
-    surface: Surface<W, H>,
+    surface: Option<Surface<W, H>>,
     keymap: KeyMap,
+    scale_factor: u32,
     limit_framerate: bool,
     frame_limiter: Interval,
     instant: Instant,
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
-    pub fn new(event_loop: &EventLoop<()>, keymap: KeyMap, scale_factor: u32) -> Result<Self> {
-        Ok(Self {
-            surface: Surface::new(event_loop, scale_factor)?,
+    pub fn new(keymap: KeyMap, scale_factor: u32) -> Self {
+        Self {
+            surface: None,
             keymap,
+            scale_factor,
             limit_framerate: true,
             frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
             instant: Instant::now(),
-        })
+        }
     }
 
-    pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
-        if self.limit_framerate {
-            cpu.run_frame()?;
-            self.frame_limiter.tick();
-        } else {
-            while self.instant.elapsed() < Duration::from_secs_f64(1.0 / 480.0) {
-                cpu.run_frame()?;
-            }
-        }
-        cpu.ppu_mut().render(&mut self.surface.pixels)?;
-        self.instant = Instant::now();
+    pub fn reinit_surface(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+        self.surface = Some(Surface::new(event_loop, self.scale_factor)?);
         Ok(())
     }
 
-    pub fn process_event(&mut self, event: &WinitEvent<()>) -> Option<DisplayEvent> {
-        let WinitEvent::WindowEvent { event, .. } = event else {
-            return None;
-        };
+    pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
+        if let Some(surface) = &mut self.surface {
+            if self.limit_framerate {
+                cpu.run_frame()?;
+                self.frame_limiter.tick();
+            } else {
+                while self.instant.elapsed() < Duration::from_secs_f64(1.0 / 480.0) {
+                    cpu.run_frame()?;
+                }
+            }
+            cpu.ppu_mut().render(&mut surface.pixels)?;
+            self.instant = Instant::now();
+        }
+        Ok(())
+    }
+
+    pub fn process_event(&mut self, event: &WindowEvent) -> Option<DisplayEvent> {
         match event {
             WindowEvent::RedrawRequested => {
-                self.surface.window.request_redraw();
+                if let Some(surface) = &self.surface {
+                    surface.window.request_redraw();
+                }
                 Some(DisplayEvent::RedrawRequested)
             }
             WindowEvent::CloseRequested | WindowEvent::Destroyed => Some(DisplayEvent::Quit),
@@ -101,21 +109,22 @@ impl<const W: u32, const H: u32> Display<W, H> {
 }
 
 struct Surface<const W: u32, const H: u32> {
-    window: Arc<WinitWindow>,
+    window: Arc<Window>,
     pixels: Pixels<'static>,
 }
 
 impl<const W: u32, const H: u32> Surface<W, H> {
-    fn new(event_loop: &EventLoop<()>, scale_factor: u32) -> Result<Self> {
+    fn new(event_loop: &ActiveEventLoop, scale_factor: u32) -> Result<Self> {
         event_loop.set_control_flow(ControlFlow::Poll);
         let size = LogicalSize::new((W * scale_factor) as f64, (H * scale_factor) as f64);
         let window = Arc::new(
-            WindowBuilder::new()
-                .with_inner_size(size)
-                .with_min_inner_size(size)
-                .with_resizable(false)
-                .with_title("rgb")
-                .build(event_loop)?,
+            event_loop.create_window(
+                Window::default_attributes()
+                    .with_inner_size(size)
+                    .with_min_inner_size(size)
+                    .with_resizable(false)
+                    .with_title("rgb"),
+            )?,
         );
 
         let pixels = {
