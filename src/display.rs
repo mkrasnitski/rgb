@@ -26,7 +26,9 @@ pub enum DisplayEvent {
 pub struct Display<const W: u32, const H: u32> {
     surface: Surface<W, H>,
     keymap: KeyMap,
-    frame_limiter: FrameLimiter,
+    limit_framerate: bool,
+    frame_limiter: Interval,
+    instant: Instant,
 }
 
 impl<const W: u32, const H: u32> Display<W, H> {
@@ -34,19 +36,23 @@ impl<const W: u32, const H: u32> Display<W, H> {
         Ok(Self {
             surface: Surface::new(event_loop, scale_factor)?,
             keymap,
-            frame_limiter: FrameLimiter {
-                limit_framerate: true,
-                frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
-                frame_time: None,
-                instant: Instant::now(),
-            },
+            limit_framerate: true,
+            frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
+            instant: Instant::now(),
         })
     }
 
     pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
-        self.frame_limiter.run(|| cpu.run_frame())?;
+        if self.limit_framerate {
+            cpu.run_frame()?;
+            self.frame_limiter.tick();
+        } else {
+            while self.instant.elapsed() < Duration::from_secs_f64(1.0 / 480.0) {
+                cpu.run_frame()?;
+            }
+        }
         cpu.ppu_mut().render(&mut self.surface.pixels)?;
-        self.frame_limiter.tick();
+        self.instant = Instant::now();
         Ok(())
     }
 
@@ -90,7 +96,7 @@ impl<const W: u32, const H: u32> Display<W, H> {
     }
 
     pub fn toggle_frame_limiter(&mut self) {
-        self.frame_limiter.limit_framerate = !self.frame_limiter.limit_framerate;
+        self.limit_framerate = !self.limit_framerate;
     }
 }
 
@@ -123,34 +129,5 @@ impl<const W: u32, const H: u32> Surface<W, H> {
         };
 
         Ok(Self { window, pixels })
-    }
-}
-
-struct FrameLimiter {
-    limit_framerate: bool,
-    frame_limiter: Interval,
-    frame_time: Option<Duration>,
-    instant: Instant,
-}
-
-impl FrameLimiter {
-    fn run(&mut self, mut task: impl FnMut() -> Result<()>) -> Result<()> {
-        while self.instant.elapsed() < self.frame_time.unwrap_or_default() {
-            task()?;
-            if self.limit_framerate {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn tick(&mut self) {
-        if self.frame_time.is_none() {
-            self.frame_time = Some(self.instant.elapsed());
-        }
-        if self.limit_framerate {
-            self.frame_limiter.tick();
-        }
-        self.instant = Instant::now();
     }
 }
