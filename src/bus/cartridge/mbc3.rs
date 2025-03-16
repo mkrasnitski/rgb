@@ -284,7 +284,7 @@ impl Rtc {
             if self.cycles == 128 {
                 self.cycles = 0;
                 self.ticks += 1;
-            };
+            }
 
             if self.ticks == 32768 {
                 self.ticks = 0;
@@ -301,11 +301,11 @@ impl Rtc {
                             if self.internal_state.days == 512 {
                                 self.internal_state.days = 0;
                                 self.carry = true;
-                            };
-                        };
-                    };
-                };
-            };
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

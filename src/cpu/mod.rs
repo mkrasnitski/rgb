@@ -1,14 +1,14 @@
 mod instruction;
 mod registers;
 
-use crate::bus::joypad::Joypad;
 use crate::bus::MemoryBus;
+use crate::bus::joypad::Joypad;
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use instruction::*;
 use num_traits::FromPrimitive;
-use registers::{Reg16, Reg8, RegWrite, Registers};
+use registers::{Reg8, Reg16, RegWrite, Registers};
 
 pub struct Cpu {
     registers: Registers,
@@ -586,7 +586,7 @@ impl Cpu {
                     if self.registers.flags.h || (val & 0xf) > 0x9 {
                         val = val.wrapping_add(0x06);
                     }
-                };
+                }
                 self.write8(R8::A, val);
                 self.set_flags(Some(val == 0), None, Some(false), None);
             }

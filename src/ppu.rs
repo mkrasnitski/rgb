@@ -208,7 +208,7 @@ impl Ppu {
                                 .binary_search_by(|s| sprite.x.cmp(&s.x))
                                 .unwrap_or_else(|e| e);
                             self.oam_sprites.insert(idx, sprite);
-                        };
+                        }
                     }
                 }
             } else if clocks == 20 {

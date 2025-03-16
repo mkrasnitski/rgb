@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use serde::de::{Deserializer, IntoDeserializer};
 use serde::Deserialize;
+use serde::de::{Deserializer, IntoDeserializer};
 use winit::keyboard::KeyCode as WinitKeyCode;
 
 pub struct KeyMap {

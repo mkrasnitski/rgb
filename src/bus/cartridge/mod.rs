@@ -3,10 +3,10 @@ mod mbc2;
 mod mbc3;
 mod mbc5;
 
-use mbc1::{MBC1Ram, MBC1};
+use mbc1::{MBC1, MBC1Ram};
 use mbc2::MBC2;
-use mbc3::{MBC3Ram, MBC3RamRtc, MBC3Rtc, MBC3};
-use mbc5::{MBC5Ram, MBC5};
+use mbc3::{MBC3, MBC3Ram, MBC3RamRtc, MBC3Rtc};
+use mbc5::{MBC5, MBC5Ram};
 
 trait Mapper {
     fn read(&self, addr: u16) -> u8;
