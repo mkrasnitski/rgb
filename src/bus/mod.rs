@@ -1,6 +1,7 @@
 mod cartridge;
 pub mod joypad;
 
+use crate::apu::Apu;
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use cartridge::*;
@@ -61,6 +62,7 @@ pub struct MemoryBus {
     bootrom: [u8; 0x100],
     pub cartridge: Cartridge,
     ppu: Ppu,
+    pub apu: Apu,
     wram: Box<[u8; 0x2000]>,
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
@@ -76,6 +78,7 @@ impl MemoryBus {
         Self {
             bootrom,
             cartridge: Cartridge::new(cartridge),
+            apu: Apu::new(),
             ppu: Ppu::new(),
             wram: vec![0; 0x2000].try_into().unwrap(),
             hram: vec![0; 0x7f].try_into().unwrap(),
@@ -109,6 +112,10 @@ impl MemoryBus {
             0xff06 => self.timers.tma,
             0xff07 => self.timers.tac | 0xf8,
 
+            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
+                self.apu.read(addr)
+            }
+
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr),
 
             0xff46 => self.dma_base,
@@ -120,7 +127,6 @@ impl MemoryBus {
             // stubs
             0xff01 => 0x00,
             0xff02 => 0x7e,
-            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => 0x00,
 
             // unused on DMG
             0xff03
@@ -161,6 +167,10 @@ impl MemoryBus {
             0xff0f => self.int_flag = val | 0xE0,
             0xffff => self.int_enable = val,
 
+            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
+                self.apu.write(addr, val)
+            }
+
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
 
             0xff46 => {
@@ -179,7 +189,6 @@ impl MemoryBus {
 
             // stubs
             0xff01 | 0xff02 => {}
-            0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {}
 
             // unused on DMG
             0xff03
