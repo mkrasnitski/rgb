@@ -30,8 +30,13 @@ impl Default for Timers {
 }
 
 impl Timers {
-    pub fn increment(&mut self) -> bool {
+    pub fn increment(&mut self, apu: &mut Apu) -> bool {
+        let old_div = self.div;
         self.div = self.div.wrapping_add(4);
+        // Tick Apu FS on falling edge of bit 12
+        if old_div.bit(12) && !self.div.bit(12) {
+            apu.tick_frame_sequencer();
+        }
         let bit = match self.tac & 0b11 {
             0 => 9,
             1 => 3,

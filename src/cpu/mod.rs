@@ -126,7 +126,7 @@ impl Cpu {
     }
 
     fn mtick(&mut self) {
-        if self.memory.timers.increment() {
+        if self.memory.timers.increment(&mut self.memory.apu) {
             self.request_interrupt(Interrupt::Timer);
         }
         self.memory.cartridge.increment_rtc();

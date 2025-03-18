@@ -60,7 +60,14 @@ impl Apu {
 
             0xff24 => self.master_volume_vin_panning,
             0xff25 => self.sound_panning,
-            0xff26 => ((self.master_enable as u8) << 7) | 0x70,
+            0xff26 => {
+                ((self.master_enable as u8) << 7)
+                    | 0b01110000
+                    | ((self.channel4.enabled() as u8) << 3)
+                    | ((self.channel3.enabled() as u8) << 2)
+                    | ((self.channel2.enabled() as u8) << 1)
+                    | self.channel1.enabled() as u8
+            }
 
             0xff30..=0xff3f => self.aram[addr as usize - 0xff30],
             _ => unreachable!(),
@@ -108,6 +115,11 @@ impl Apu {
         if self.sample_buffer.len() == 8192 {
             self.send_samples()
         }
+    }
+
+    pub fn tick_frame_sequencer(&mut self) {
+        self.channel1.tick_frame_sequencer();
+        self.channel2.tick_frame_sequencer();
     }
 
     fn send_samples(&mut self) {
