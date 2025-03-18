@@ -48,4 +48,8 @@ impl Channel4 {
             _ => unreachable!(),
         }
     }
+
+    pub fn enabled(&self) -> bool {
+        self.trigger
+    }
 }
