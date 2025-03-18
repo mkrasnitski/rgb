@@ -1,3 +1,4 @@
+use super::DUTY_CYCLES;
 use crate::utils::BitExtract;
 
 #[derive(Default)]
@@ -13,6 +14,9 @@ pub struct Channel1 {
     period: u16,
     length_enable: bool,
     trigger: bool,
+
+    duty_position: u8,
+    period_counter: u16,
 }
 
 impl Channel1 {
@@ -58,9 +62,27 @@ impl Channel1 {
                 self.period &= 0xff;
                 self.period |= ((val & 0b111) as u16) << 8;
                 self.length_enable = val.bit(6);
-                self.trigger = val.bit(7);
+
+                if val.bit(7) {
+                    self.trigger = true;
+                    self.period_counter = self.period;
+                }
             }
             _ => unreachable!(),
         }
+    }
+
+    pub fn tick(&mut self) {
+        if self.trigger {
+            self.period_counter += 1;
+            if self.period_counter == 2048 {
+                self.duty_position = (self.duty_position + 1) % 8;
+                self.period_counter = self.period
+            }
+        }
+    }
+
+    pub fn sample(&self) -> f32 {
+        ((DUTY_CYCLES[self.duty as usize] >> (7 - self.duty_position)) & 1) as f32
     }
 }

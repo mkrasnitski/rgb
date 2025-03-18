@@ -134,6 +134,7 @@ impl Cpu {
             self.request_interrupt(Interrupt::Joypad);
         }
         let (vblank, stat) = self.ppu_mut().step();
+        self.memory.apu.tick();
         if vblank {
             self.request_interrupt(Interrupt::VBlank);
         }
