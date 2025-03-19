@@ -19,6 +19,8 @@ pub struct Channel1 {
     period_counter: u16,
     frame_sequence: u8,
     length_timer: u8,
+    volume: u8,
+    volume_pace_timer: u8,
     dac_enabled: bool,
 }
 
@@ -78,6 +80,8 @@ impl Channel1 {
                     if self.length_timer == 0 {
                         self.length_timer = 64;
                     }
+                    self.volume = self.initial_volume;
+                    self.volume_pace_timer = 0;
                 }
             }
             _ => unreachable!(),
@@ -106,9 +110,25 @@ impl Channel1 {
                 self.trigger = false;
             }
         }
+        if self.frame_sequence == 7 && self.volume_pace != 0 {
+            self.volume_pace_timer += 1;
+            if self.volume_pace_timer == self.volume_pace {
+                if self.volume_direction {
+                    self.volume = std::cmp::min(15, self.volume + 1);
+                } else {
+                    self.volume = self.volume.saturating_sub(1);
+                }
+                self.volume_pace_timer = 0;
+            }
+        }
     }
 
     pub fn sample(&self) -> f32 {
-        ((DUTY_CYCLES[self.duty as usize] >> (7 - self.duty_position)) & 1) as f32
+        let sample = (DUTY_CYCLES[self.duty as usize] >> (7 - self.duty_position)) & 1;
+        if self.dac_enabled {
+            ((self.volume * sample) as f32 / 15.0) * 2.0 - 1.0
+        } else {
+            0.0
+        }
     }
 }

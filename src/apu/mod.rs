@@ -24,7 +24,10 @@ pub struct Apu {
     channel3: channel3::Channel3,
     channel4: channel4::Channel4,
     aram: [u8; 0x10],
-    master_volume_vin_panning: u8,
+    vin_left: bool,
+    left_volume: u8,
+    vin_right: bool,
+    right_volume: u8,
     sound_panning: u8,
     master_enable: bool,
 
@@ -42,7 +45,10 @@ impl Apu {
             channel3: Default::default(),
             channel4: Default::default(),
             aram: [0; 0x10],
-            master_volume_vin_panning: 0,
+            vin_left: false,
+            left_volume: 0,
+            vin_right: false,
+            right_volume: 0,
             sound_panning: 0,
             master_enable: false,
 
@@ -58,7 +64,12 @@ impl Apu {
             0xff1a..=0xff1e => self.channel3.read(addr),
             0xff20..=0xff23 => self.channel4.read(addr),
 
-            0xff24 => self.master_volume_vin_panning,
+            0xff24 => {
+                ((self.vin_left as u8) << 7)
+                    | (self.left_volume << 4)
+                    | ((self.vin_right as u8) << 3)
+                    | self.right_volume
+            }
             0xff25 => self.sound_panning,
             0xff26 => {
                 ((self.master_enable as u8) << 7)
@@ -85,7 +96,12 @@ impl Apu {
             0xff1a..=0xff1e => self.channel3.write(addr, val),
             0xff20..=0xff23 => self.channel4.write(addr, val),
 
-            0xff24 => self.master_volume_vin_panning = val,
+            0xff24 => {
+                self.vin_left = val.bit(7);
+                self.left_volume = (val >> 4) & 0b111;
+                self.vin_right = val.bit(3);
+                self.right_volume = val & 0b111;
+            }
             0xff25 => self.sound_panning = val,
             0xff26 => {
                 let bit = val.bit(7);
@@ -96,7 +112,10 @@ impl Apu {
                     self.channel2 = Default::default();
                     self.channel3 = Default::default();
                     self.channel4 = Default::default();
-                    self.master_volume_vin_panning = 0;
+                    self.vin_left = false;
+                    self.left_volume = 0;
+                    self.vin_right = false;
+                    self.right_volume = 0;
                     self.sound_panning = 0;
                 }
             }
@@ -110,8 +129,12 @@ impl Apu {
         self.channel1.tick();
         self.channel2.tick();
 
-        self.sample_buffer
-            .push(self.channel1.sample() * 0.2 + self.channel2.sample() * 0.2);
+        let left_volume = (self.left_volume as f32 + 1.0) / 8.0;
+        let right_volume = (self.right_volume as f32 + 1.0) / 8.0;
+        let total_volume = (left_volume + right_volume) / 2.0;
+
+        let sample = (self.channel1.sample() + self.channel2.sample()) / 2.0;
+        self.sample_buffer.push(sample * total_volume * 0.2);
         if self.sample_buffer.len() == 8192 {
             self.send_samples()
         }
