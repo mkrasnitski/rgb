@@ -52,6 +52,7 @@ impl ApplicationHandler for Gameboy {
                     Hotkey::ToggleFrameLimiter => {
                         if pressed {
                             self.display.toggle_frame_limiter();
+                            self.cpu.toggle_frame_limiter();
                         }
                     }
                 },

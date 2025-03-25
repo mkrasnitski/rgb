@@ -5,7 +5,7 @@ use crate::cpu::Cpu;
 use crate::hotkeys::{Hotkey, KeyMap};
 
 use anyhow::Result;
-use pixels::{Pixels, SurfaceTexture};
+use pixels::{Pixels, PixelsBuilder, SurfaceTexture};
 use spin_sleep_util::Interval;
 use winit::{
     dpi::LogicalSize,
@@ -134,7 +134,9 @@ impl<const W: u32, const H: u32> Surface<W, H> {
                 physical_window_size.height,
                 Arc::clone(&window),
             );
-            Pixels::new(W, H, surface_texture)?
+            PixelsBuilder::new(W, H, surface_texture)
+                .enable_vsync(false)
+                .build()?
         };
 
         Ok(Self { window, pixels })
