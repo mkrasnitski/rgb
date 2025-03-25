@@ -1,6 +1,7 @@
 use crate::utils::BitExtract;
 
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use cpal::StreamConfig;
@@ -19,6 +20,7 @@ const DUTY_CYCLES: [u8; 4] = [
 ];
 
 pub struct Apu {
+    sampler: Sampler,
     channel1: channel1::Channel1,
     channel2: channel2::Channel2,
     channel3: channel3::Channel3,
@@ -30,9 +32,6 @@ pub struct Apu {
     right_volume: u8,
     sound_panning: u8,
     master_enable: bool,
-
-    sample_tx: Sender<[f32; 375]>,
-    sample_buffer: Vec<f32>,
 }
 
 impl Apu {
@@ -40,6 +39,7 @@ impl Apu {
         let (sample_tx, sample_rx) = channel();
         std::thread::spawn(move || spawn_audio(sample_rx));
         Self {
+            sampler: Sampler::new(sample_tx),
             channel1: Default::default(),
             channel2: Default::default(),
             channel3: Default::default(),
@@ -51,9 +51,6 @@ impl Apu {
             right_volume: 0,
             sound_panning: 0,
             master_enable: false,
-
-            sample_tx,
-            sample_buffer: Vec::with_capacity(8192),
         }
     }
 
@@ -134,10 +131,7 @@ impl Apu {
         let total_volume = (left_volume + right_volume) / 2.0;
 
         let sample = (self.channel1.sample() + self.channel2.sample()) / 2.0;
-        self.sample_buffer.push(sample * total_volume * 0.2);
-        if self.sample_buffer.len() == 8192 {
-            self.send_samples()
-        }
+        self.sampler.push_sample(sample * total_volume * 0.2);
     }
 
     pub fn tick_frame_sequencer(&mut self) {
@@ -145,56 +139,12 @@ impl Apu {
         self.channel2.tick_frame_sequencer();
     }
 
-    fn send_samples(&mut self) {
-        // 8192 samples @ 1048576Hz = 375 samples @ 48000Hz
-        //
-        // Interpolate 22 or 21 samples at a time.
-        //   8192 = 317*22 + 58*21
-        //   317 + 58 = 375
-        let (h1, h2) = self.sample_buffer.split_at(317 * 22);
-        let samples = h1
-            .chunks_exact(22)
-            .chain(h2.chunks_exact(21))
-            .map(|slice| slice.iter().sum::<f32>() / slice.len() as f32)
-            .collect::<Vec<_>>()
-            .try_into()
-            .unwrap();
-        self.sample_buffer.clear();
-        self.sample_tx.send(samples).unwrap()
+    pub fn toggle_frame_limiter(&mut self) {
+        self.sampler.limit_framerate = !self.sampler.limit_framerate;
     }
 }
 
-struct SampleIterator<const N: usize> {
-    sample_rx: Receiver<[f32; N]>,
-    buffer: Option<[f32; N]>,
-    index: usize,
-}
-
-impl<const N: usize> SampleIterator<N> {
-    fn new(sample_rx: Receiver<[f32; N]>) -> Self {
-        Self {
-            sample_rx,
-            buffer: None,
-            index: 0,
-        }
-    }
-}
-
-impl<const N: usize> Iterator for SampleIterator<N> {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.buffer.is_none() || self.index >= N {
-            self.buffer = Some(self.sample_rx.recv().ok()?);
-            self.index = 0;
-        }
-        let val = self.buffer.map(|buf| buf[self.index]);
-        self.index += 1;
-        val
-    }
-}
-
-fn spawn_audio(sample_rx: Receiver<[f32; 375]>) -> Result<()> {
+fn spawn_audio(sample_rx: Receiver<f32>) -> Result<()> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -205,12 +155,11 @@ fn spawn_audio(sample_rx: Receiver<[f32; 375]>) -> Result<()> {
         buffer_size: cpal::BufferSize::Default,
     };
 
-    let mut sample_iter = SampleIterator::new(sample_rx);
     let stream = device.build_output_stream(
         &config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_mut(2) {
-                if let Some(sample) = sample_iter.next() {
+                if let Ok(sample) = sample_rx.recv() {
                     for channel in frame.iter_mut() {
                         *channel = sample;
                     }
@@ -223,5 +172,52 @@ fn spawn_audio(sample_rx: Receiver<[f32; 375]>) -> Result<()> {
     stream.play()?;
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
+}
+
+struct Sampler {
+    sample_tx: Sender<f32>,
+    sample_buffer: Vec<f32>,
+    instant: Instant,
+    limit_framerate: bool,
+}
+
+impl Sampler {
+    fn new(sample_tx: Sender<f32>) -> Self {
+        Self {
+            sample_tx,
+            sample_buffer: Vec::with_capacity(8192),
+            instant: Instant::now(),
+            limit_framerate: true,
+        }
+    }
+
+    fn push_sample(&mut self, sample: f32) {
+        if self.sample_buffer.len() < 8192 {
+            self.sample_buffer.push(sample);
+        }
+        if self.sample_buffer.len() == 8192
+            && (self.limit_framerate
+                || self.instant.elapsed() >= Duration::from_secs_f64(1.0 / 128.0))
+        {
+            // 8192 samples @ 1048576Hz = 375 samples @ 48000Hz
+            //
+            // Interpolate 22 or 21 samples at a time.
+            //   8192 = 317*22 + 58*21
+            //   317 + 58 = 375
+            let (h1, h2) = self.sample_buffer.split_at(317 * 22);
+            let samples: [f32; 375] = h1
+                .chunks_exact(22)
+                .chain(h2.chunks_exact(21))
+                .map(|slice| slice.iter().sum::<f32>() / slice.len() as f32)
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap();
+            for sample in samples {
+                self.sample_tx.send(sample).unwrap();
+            }
+            self.sample_buffer.clear();
+            self.instant = Instant::now();
+        }
     }
 }

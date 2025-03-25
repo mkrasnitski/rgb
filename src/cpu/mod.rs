@@ -144,6 +144,10 @@ impl Cpu {
         self.cycles += 1;
     }
 
+    pub fn toggle_frame_limiter(&mut self) {
+        self.memory.apu.toggle_frame_limiter();
+    }
+
     fn request_interrupt(&mut self, int: Interrupt) {
         self.memory
             .write(0xff0f, self.memory.read(0xff0f) | 1 << (int as u8));
