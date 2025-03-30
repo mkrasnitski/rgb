@@ -1,4 +1,5 @@
 use super::DUTY_CYCLES;
+use super::utils::{LengthCounter, VolumeEnvelope};
 use crate::utils::BitExtract;
 
 #[derive(Default)]
@@ -6,21 +7,15 @@ pub struct Channel1 {
     sweep_step: u8,
     sweep_direction: bool,
     sweep_pace: u8,
-    length: u8,
     duty: u8,
-    initial_volume: u8,
-    volume_direction: bool,
-    volume_pace: u8,
     period: u16,
-    length_enable: bool,
     trigger: bool,
 
     duty_position: u8,
     period_counter: u16,
     frame_sequence: u8,
-    length_timer: u8,
-    volume: u8,
-    volume_pace_timer: u8,
+    length: LengthCounter,
+    volume: VolumeEnvelope,
     dac_enabled: bool,
 }
 
@@ -35,10 +30,12 @@ impl Channel1 {
             }
             0xff11 => (self.duty << 6) | 0x3f,
             0xff12 => {
-                (self.initial_volume << 4) | ((self.volume_direction as u8) << 3) | self.volume_pace
+                (self.volume.initial_level << 4)
+                    | ((self.volume.direction as u8) << 3)
+                    | self.volume.pace
             }
             0xff13 => 0xff,
-            0xff14 => ((self.length_enable as u8) << 6) | 0xbf,
+            0xff14 => ((self.length.enable as u8) << 6) | 0xbf,
             _ => unreachable!(),
         }
     }
@@ -51,14 +48,13 @@ impl Channel1 {
                 self.sweep_pace = (val >> 4) & 0b111;
             }
             0xff11 => {
-                self.length = val & 0b111111;
-                self.length_timer = 64 - self.length;
+                self.length.set_timer(val & 0b111111);
                 self.duty = (val >> 6) & 0b11;
             }
             0xff12 => {
-                self.volume_pace = val & 0b111;
-                self.volume_direction = val.bit(3);
-                self.initial_volume = val >> 4;
+                self.volume.pace = val & 0b111;
+                self.volume.direction = val.bit(3);
+                self.volume.initial_level = val >> 4;
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {
@@ -72,16 +68,13 @@ impl Channel1 {
             0xff14 => {
                 self.period &= 0xff;
                 self.period |= ((val & 0b111) as u16) << 8;
-                self.length_enable = val.bit(6);
+                self.length.enable = val.bit(6);
 
                 if val.bit(7) && self.dac_enabled {
                     self.trigger = true;
                     self.period_counter = self.period;
-                    if self.length_timer == 0 {
-                        self.length_timer = 64;
-                    }
-                    self.volume = self.initial_volume;
-                    self.volume_pace_timer = 0;
+                    self.length.trigger();
+                    self.volume.trigger();
                 }
             }
             _ => unreachable!(),
@@ -104,29 +97,18 @@ impl Channel1 {
 
     pub fn tick_frame_sequencer(&mut self) {
         self.frame_sequence = (self.frame_sequence + 1) % 8;
-        if self.frame_sequence % 2 == 0 && self.length_enable {
-            self.length_timer = self.length_timer.saturating_sub(1);
-            if self.length_timer == 0 {
-                self.trigger = false;
-            }
+        if self.frame_sequence % 2 == 0 && self.length.tick() {
+            self.trigger = false;
         }
-        if self.frame_sequence == 7 && self.volume_pace != 0 {
-            self.volume_pace_timer += 1;
-            if self.volume_pace_timer == self.volume_pace {
-                if self.volume_direction {
-                    self.volume = std::cmp::min(15, self.volume + 1);
-                } else {
-                    self.volume = self.volume.saturating_sub(1);
-                }
-                self.volume_pace_timer = 0;
-            }
+        if self.frame_sequence == 7 {
+            self.volume.tick();
         }
     }
 
     pub fn sample(&self) -> f32 {
         let sample = (DUTY_CYCLES[self.duty as usize] >> (7 - self.duty_position)) & 1;
         if self.dac_enabled {
-            ((self.volume * sample) as f32 / 15.0) * 2.0 - 1.0
+            ((self.volume.get_level() * sample) as f32 / 15.0) * 2.0 - 1.0
         } else {
             0.0
         }

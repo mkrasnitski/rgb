@@ -11,6 +11,7 @@ mod channel1;
 mod channel2;
 mod channel3;
 mod channel4;
+mod utils;
 
 const DUTY_CYCLES: [u8; 4] = [
     0b00000001, // 12.5%
