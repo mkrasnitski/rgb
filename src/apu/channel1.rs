@@ -11,7 +11,7 @@ pub struct Channel1 {
     duty_position: u8,
     period_counter: u16,
     frame_sequence: u8,
-    length: LengthCounter,
+    length: LengthCounter<64>,
     volume: VolumeEnvelope,
     sweep: SweepEnvelope,
     dac_enabled: bool,

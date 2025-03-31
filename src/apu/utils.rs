@@ -1,27 +1,27 @@
 #[derive(Default)]
-pub struct LengthCounter {
+pub struct LengthCounter<const N: u16> {
     pub enable: bool,
-    timer: u8,
+    timer: u16,
 }
 
-impl LengthCounter {
+impl<const N: u16> LengthCounter<N> {
     pub fn trigger(&mut self) {
-        if self.timer == 64 {
-            self.timer = 0;
+        if self.timer == 0 {
+            self.timer = N;
         }
     }
 
     pub fn set_timer(&mut self, val: u8) {
-        self.timer = val;
+        self.timer = N - val as u16;
     }
 
     pub fn tick(&mut self) -> bool {
         if self.enable {
-            let next = self.timer + 1;
-            self.timer = std::cmp::min(next, 64);
-            return self.timer == 64;
+            self.timer = self.timer.saturating_sub(1);
+            self.timer == 0
+        } else {
+            false
         }
-        false
     }
 }
 

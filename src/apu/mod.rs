@@ -84,7 +84,7 @@ impl Apu {
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
-        if addr != 0xff26 && !self.master_enable {
+        if !(self.master_enable || addr == 0xff26 || (0xff30..=0xff3f).contains(&addr)) {
             return;
         }
 
@@ -126,18 +126,23 @@ impl Apu {
     pub fn tick(&mut self) {
         self.channel1.tick();
         self.channel2.tick();
+        self.channel3.tick();
+        self.channel3.tick();
 
         let left_volume = (self.left_volume as f32 + 1.0) / 8.0;
         let right_volume = (self.right_volume as f32 + 1.0) / 8.0;
         let total_volume = (left_volume + right_volume) / 2.0;
 
-        let sample = (self.channel1.sample() + self.channel2.sample()) / 2.0;
+        let sample =
+            (self.channel1.sample() + self.channel2.sample() + self.channel3.sample(&self.aram))
+                / 3.0;
         self.sampler.push_sample(sample * total_volume * 0.2);
     }
 
     pub fn tick_frame_sequencer(&mut self) {
         self.channel1.tick_frame_sequencer();
         self.channel2.tick_frame_sequencer();
+        self.channel3.tick_frame_sequencer();
     }
 
     pub fn toggle_frame_limiter(&mut self) {
