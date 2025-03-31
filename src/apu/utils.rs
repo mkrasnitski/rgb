@@ -63,3 +63,67 @@ impl VolumeEnvelope {
         if self.pace == 0 { 8 } else { self.pace }
     }
 }
+
+#[derive(Default)]
+pub struct SweepEnvelope {
+    pub step: u8,
+    direction: bool,
+    pub pace: u8,
+
+    shadow_period: u16,
+    pace_timer: u8,
+    enabled: bool,
+    negate_mode: bool,
+}
+
+impl SweepEnvelope {
+    pub fn trigger(&mut self, period: u16) -> bool {
+        self.shadow_period = period;
+        self.pace_timer = self.get_pace();
+        self.enabled = self.pace != 0 || self.step != 0;
+        self.negate_mode = false;
+        self.step != 0 && self.next_period() > 2047
+    }
+
+    pub fn tick(&mut self) -> Option<(Option<u16>, bool)> {
+        if self.pace_timer != 0 {
+            self.pace_timer -= 1;
+            if self.pace_timer == 0 {
+                self.pace_timer = self.get_pace();
+                if self.enabled && self.pace != 0 {
+                    let next_period = self.next_period();
+                    if next_period > 2047 {
+                        return Some((None, true));
+                    } else if self.step > 0 {
+                        self.shadow_period = next_period;
+                        return Some((Some(next_period), self.next_period() > 2047));
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn get_direction(&self) -> bool {
+        self.direction
+    }
+
+    pub fn set_direction(&mut self, direction: bool) -> bool {
+        self.direction = direction;
+        self.negate_mode && !direction
+    }
+
+    fn get_pace(&self) -> u8 {
+        if self.pace == 0 { 8 } else { self.pace }
+    }
+
+    fn next_period(&mut self) -> u16 {
+        let step = self.shadow_period >> self.step;
+        if self.direction {
+            self.negate_mode = true;
+            self.shadow_period.wrapping_sub(step)
+        } else {
+            self.shadow_period.wrapping_add(step)
+        }
+    }
+}
