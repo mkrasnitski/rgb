@@ -1,12 +1,9 @@
 use super::DUTY_CYCLES;
-use super::utils::{LengthCounter, VolumeEnvelope};
+use super::utils::{LengthCounter, SweepEnvelope, VolumeEnvelope};
 use crate::utils::BitExtract;
 
 #[derive(Default)]
 pub struct Channel1 {
-    sweep_step: u8,
-    sweep_direction: bool,
-    sweep_pace: u8,
     duty: u8,
     period: u16,
     trigger: bool,
@@ -16,6 +13,7 @@ pub struct Channel1 {
     frame_sequence: u8,
     length: LengthCounter,
     volume: VolumeEnvelope,
+    sweep: SweepEnvelope,
     dac_enabled: bool,
 }
 
@@ -23,9 +21,9 @@ impl Channel1 {
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0xff10 => {
-                (self.sweep_pace << 4)
-                    | ((self.sweep_direction as u8) << 3)
-                    | self.sweep_step
+                (self.sweep.pace << 4)
+                    | ((self.sweep.get_direction() as u8) << 3)
+                    | self.sweep.step
                     | 0x80
             }
             0xff11 => (self.duty << 6) | 0x3f,
@@ -43,9 +41,11 @@ impl Channel1 {
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0xff10 => {
-                self.sweep_step = val & 0b111;
-                self.sweep_direction = val.bit(3);
-                self.sweep_pace = (val >> 4) & 0b111;
+                self.sweep.step = val & 0b111;
+                if self.sweep.set_direction(val.bit(3)) {
+                    self.trigger = false;
+                }
+                self.sweep.pace = (val >> 4) & 0b111;
             }
             0xff11 => {
                 self.length.set_timer(val & 0b111111);
@@ -75,6 +75,9 @@ impl Channel1 {
                     self.period_counter = self.period;
                     self.length.trigger();
                     self.volume.trigger();
+                    if self.sweep.trigger(self.period) {
+                        self.trigger = false;
+                    }
                 }
             }
             _ => unreachable!(),
@@ -102,6 +105,16 @@ impl Channel1 {
         }
         if self.frame_sequence == 7 {
             self.volume.tick();
+        }
+        if self.frame_sequence == 2 || self.frame_sequence == 6 {
+            if let Some((next_period, disable)) = self.sweep.tick() {
+                if let Some(period) = next_period {
+                    self.period = period;
+                }
+                if disable {
+                    self.trigger = false;
+                }
+            }
         }
     }
 
