@@ -32,6 +32,7 @@ impl Mapper for MBC5 {
             0x3000..=0x3fff => {
                 self.bank = (((val as u16 & 1) << 8) | (self.bank & 0xff)) % self.num_banks;
             }
+            0x4000..=0x7fff => {}
             _ => unreachable!(),
         }
     }
@@ -78,6 +79,7 @@ impl Mapper for MBC5Ram {
                 let num_ram_banks = self.ram.len().div_ceil(0x2000) as u8;
                 self.ram_bank = (val & 0b1111) % num_ram_banks;
             }
+            0x6000..=0x7fff => {}
             0xa000..=0xbfff => {
                 if self.ram_enabled {
                     self.ram[self.ram_bank as usize * 0x2000 + addr as usize - 0xa000] = val;
