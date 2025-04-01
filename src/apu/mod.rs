@@ -128,21 +128,25 @@ impl Apu {
         self.channel2.tick();
         self.channel3.tick();
         self.channel3.tick();
+        self.channel4.tick();
 
         let left_volume = (self.left_volume as f32 + 1.0) / 8.0;
         let right_volume = (self.right_volume as f32 + 1.0) / 8.0;
         let total_volume = (left_volume + right_volume) / 2.0;
 
-        let sample =
-            (self.channel1.sample() + self.channel2.sample() + self.channel3.sample(&self.aram))
-                / 3.0;
-        self.sampler.push_sample(sample * total_volume * 0.2);
+        let sample = (self.channel1.sample()
+            + self.channel2.sample()
+            + self.channel3.sample(&self.aram)
+            + self.channel4.sample())
+            / 4.0;
+        self.sampler.push_sample(sample * total_volume * 0.5);
     }
 
     pub fn tick_frame_sequencer(&mut self) {
         self.channel1.tick_frame_sequencer();
         self.channel2.tick_frame_sequencer();
         self.channel3.tick_frame_sequencer();
+        self.channel4.tick_frame_sequencer();
     }
 
     pub fn toggle_frame_limiter(&mut self) {
