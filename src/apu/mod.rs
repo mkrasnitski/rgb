@@ -26,13 +26,43 @@ pub struct Apu {
     channel2: channel2::Channel2,
     channel3: channel3::Channel3,
     channel4: channel4::Channel4,
+    panning: Panning,
     aram: [u8; 0x10],
     vin_left: bool,
     left_volume: u8,
     vin_right: bool,
     right_volume: u8,
-    sound_panning: u8,
     master_enable: bool,
+}
+
+#[derive(Default)]
+struct Panning {
+    channel1: (bool, bool),
+    channel2: (bool, bool),
+    channel3: (bool, bool),
+    channel4: (bool, bool),
+}
+
+impl Panning {
+    fn new(val: u8) -> Self {
+        Self {
+            channel1: (val.bit(4), val.bit(0)),
+            channel2: (val.bit(5), val.bit(1)),
+            channel3: (val.bit(6), val.bit(2)),
+            channel4: (val.bit(7), val.bit(3)),
+        }
+    }
+
+    fn as_u8(&self) -> u8 {
+        ((self.channel4.0 as u8) << 7)
+            | ((self.channel3.0 as u8) << 6)
+            | ((self.channel2.0 as u8) << 5)
+            | ((self.channel1.0 as u8) << 4)
+            | ((self.channel4.1 as u8) << 3)
+            | ((self.channel3.1 as u8) << 2)
+            | ((self.channel2.1 as u8) << 1)
+            | self.channel1.1 as u8
+    }
 }
 
 impl Apu {
@@ -45,12 +75,12 @@ impl Apu {
             channel2: Default::default(),
             channel3: Default::default(),
             channel4: Default::default(),
+            panning: Default::default(),
             aram: [0; 0x10],
             vin_left: false,
             left_volume: 0,
             vin_right: false,
             right_volume: 0,
-            sound_panning: 0,
             master_enable: false,
         }
     }
@@ -68,7 +98,7 @@ impl Apu {
                     | ((self.vin_right as u8) << 3)
                     | self.right_volume
             }
-            0xff25 => self.sound_panning,
+            0xff25 => self.panning.as_u8(),
             0xff26 => {
                 ((self.master_enable as u8) << 7)
                     | 0b01110000
@@ -100,7 +130,7 @@ impl Apu {
                 self.vin_right = val.bit(3);
                 self.right_volume = val & 0b111;
             }
-            0xff25 => self.sound_panning = val,
+            0xff25 => self.panning = Panning::new(val),
             0xff26 => {
                 let bit = val.bit(7);
                 self.master_enable = bit;
@@ -110,11 +140,11 @@ impl Apu {
                     self.channel2 = Default::default();
                     self.channel3 = Default::default();
                     self.channel4 = Default::default();
+                    self.panning = Panning::default();
                     self.vin_left = false;
                     self.left_volume = 0;
                     self.vin_right = false;
                     self.right_volume = 0;
-                    self.sound_panning = 0;
                 }
             }
 
@@ -126,20 +156,38 @@ impl Apu {
     pub fn tick(&mut self) {
         self.channel1.tick();
         self.channel2.tick();
-        self.channel3.tick();
+        self.channel3.tick(); // Tick channel 3 twice per mcycle
         self.channel3.tick();
         self.channel4.tick();
 
-        let left_volume = (self.left_volume as f32 + 1.0) / 8.0;
-        let right_volume = (self.right_volume as f32 + 1.0) / 8.0;
-        let total_volume = (left_volume + right_volume) / 2.0;
+        let left_vol = (self.left_volume as f32 + 1.0) / 8.0;
+        let right_vol = (self.right_volume as f32 + 1.0) / 8.0;
+        let (left_sample, right_sample) = self.sample();
 
-        let sample = (self.channel1.sample()
-            + self.channel2.sample()
-            + self.channel3.sample(&self.aram)
-            + self.channel4.sample())
-            / 4.0;
-        self.sampler.push_sample(sample * total_volume * 0.5);
+        self.sampler
+            .push_sample((left_sample * left_vol, right_sample * right_vol));
+    }
+
+    fn sample(&self) -> (f32, f32) {
+        macro_rules! pan {
+            ($chan:ident $(,$arg:expr)?) => {{
+                let sample = self.$chan.sample($($arg)?);
+                let (pan_left, pan_right) = self.panning.$chan;
+                (
+                    if pan_left { sample } else { 0.0 },
+                    if pan_right { sample } else { 0.0 },
+                )
+            }};
+        }
+
+        let (ch1_left, ch1_right) = pan!(channel1);
+        let (ch2_left, ch2_right) = pan!(channel2);
+        let (ch3_left, ch3_right) = pan!(channel3, &self.aram);
+        let (ch4_left, ch4_right) = pan!(channel4);
+
+        let left = (ch1_left + ch2_left + ch3_left + ch4_left) / 4.0;
+        let right = (ch1_right + ch2_right + ch3_right + ch4_right) / 4.0;
+        (left, right)
     }
 
     pub fn tick_frame_sequencer(&mut self) {
@@ -154,7 +202,7 @@ impl Apu {
     }
 }
 
-fn spawn_audio(sample_rx: Receiver<f32>) -> Result<()> {
+fn spawn_audio(sample_rx: Receiver<(f32, f32)>) -> Result<()> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -169,10 +217,9 @@ fn spawn_audio(sample_rx: Receiver<f32>) -> Result<()> {
         &config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_mut(2) {
-                if let Ok(sample) = sample_rx.recv() {
-                    for channel in frame.iter_mut() {
-                        *channel = sample;
-                    }
+                if let Ok((left, right)) = sample_rx.recv() {
+                    frame[0] = left;
+                    frame[1] = right;
                 }
             }
         },
@@ -186,14 +233,14 @@ fn spawn_audio(sample_rx: Receiver<f32>) -> Result<()> {
 }
 
 struct Sampler {
-    sample_tx: Sender<f32>,
-    sample_buffer: Vec<f32>,
+    sample_tx: Sender<(f32, f32)>,
+    sample_buffer: Vec<(f32, f32)>,
     instant: Instant,
     limit_framerate: bool,
 }
 
 impl Sampler {
-    fn new(sample_tx: Sender<f32>) -> Self {
+    fn new(sample_tx: Sender<(f32, f32)>) -> Self {
         Self {
             sample_tx,
             sample_buffer: Vec::with_capacity(8192),
@@ -202,7 +249,7 @@ impl Sampler {
         }
     }
 
-    fn push_sample(&mut self, sample: f32) {
+    fn push_sample(&mut self, sample: (f32, f32)) {
         if self.sample_buffer.len() < 8192 {
             self.sample_buffer.push(sample);
         }
@@ -216,10 +263,16 @@ impl Sampler {
             //   8192 = 317*22 + 58*21
             //   317 + 58 = 375
             let (h1, h2) = self.sample_buffer.split_at(317 * 22);
-            let samples: [f32; 375] = h1
+            let samples: [(f32, f32); 375] = h1
                 .chunks_exact(22)
                 .chain(h2.chunks_exact(21))
-                .map(|slice| slice.iter().sum::<f32>() / slice.len() as f32)
+                .map(|slice| {
+                    let sum = slice
+                        .iter()
+                        .fold((0.0, 0.0), |acc, s| (acc.0 + s.0, acc.1 + s.1));
+                    let len = slice.len() as f32;
+                    (sum.0 / len, sum.1 / len)
+                })
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap();

@@ -78,21 +78,21 @@ impl Channel3 {
     }
 
     pub fn sample(&self, aram: &[u8; 16]) -> f32 {
-        let byte = aram[(self.sample_index / 2) as usize];
-        let sample = if self.sample_index % 2 == 0 {
-            byte >> 4 // upper nibble
-        } else {
-            byte & 0xf // lower nibble
-        };
-        let shift = match self.volume {
-            0 => 4,
-            1 => 0,
-            2 => 1,
-            3 => 2,
-            _ => unreachable!(),
-        };
         if self.dac_enabled {
-            ((sample >> shift) as f32 / 15.0) * 2.0 - 1.0
+            let byte = aram[(self.sample_index / 2) as usize];
+            let sample = if self.sample_index % 2 == 0 {
+                byte >> 4 // upper nibble
+            } else {
+                byte & 0xf // lower nibble
+            };
+            let shift = match self.volume {
+                0 => 4,
+                1 => 0,
+                2 => 1,
+                3 => 2,
+                _ => unreachable!(),
+            };
+            (sample >> shift) as f32 / 15.0
         } else {
             0.0
         }
