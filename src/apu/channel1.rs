@@ -121,7 +121,7 @@ impl Channel1 {
     pub fn sample(&self) -> f32 {
         if self.dac_enabled {
             let sample = (DUTY_CYCLES[self.duty as usize] >> (7 - self.duty_position)) & 1;
-            (self.volume.get_level() * sample) as f32 / 15.0
+            (self.volume.get_level() as f32 * (sample as f32 - 0.5)) / 15.0
         } else {
             0.0
         }
