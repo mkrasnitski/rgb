@@ -101,7 +101,7 @@ impl Channel4 {
     pub fn sample(&self) -> f32 {
         if self.dac_enabled {
             let sample = (!self.lfsr & 1) as u8;
-            (self.volume.get_level() * sample) as f32 / 15.0
+            (self.volume.get_level() as f32 * (sample as f32 - 0.5)) / 15.0
         } else {
             0.0
         }
