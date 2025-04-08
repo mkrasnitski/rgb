@@ -31,6 +31,8 @@ pub struct Ppu {
     cycles: u16,
     ticks: u16,
     pub draw: bool,
+
+    first_lcd_frame: bool,
 }
 
 struct Sprite {
@@ -97,6 +99,8 @@ impl Ppu {
             cycles: 0,
             ticks: 0,
             draw: false,
+
+            first_lcd_frame: false,
         }
     }
 
@@ -139,7 +143,12 @@ impl Ppu {
                 PpuMode::OamScan | PpuMode::Drawing => {}
                 _ => self.oam_ram[addr as usize - 0xfe00] = val,
             },
-            0xff40 => self.LCDC = val,
+            0xff40 => {
+                if val.bit(7) && !self.LCDC.bit(7) {
+                    self.first_lcd_frame = true;
+                }
+                self.LCDC = val;
+            }
             0xff41 => {
                 self.STAT &= 0b10000111; // Clear writeable bits
                 self.STAT |= val & 0b01111000; // Set those bits
@@ -266,9 +275,9 @@ impl Ppu {
         }
     }
 
-    pub fn render(&self, pixels: &mut Pixels) -> Result<()> {
+    pub fn render(&mut self, pixels: &mut Pixels) -> Result<()> {
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
-            let color = if self.LCDC.bit(7) {
+            let color = if self.LCDC.bit(7) && !self.first_lcd_frame {
                 let pixel = self.viewport[idx / 160][idx % 160];
                 match (pixel.palette >> (2 * pixel.color)) & 0b11 {
                     0 => WHITE,
@@ -282,6 +291,7 @@ impl Ppu {
             };
             pixel.copy_from_slice(&color);
         }
+        self.first_lcd_frame = false;
         pixels.render()?;
         Ok(())
     }
