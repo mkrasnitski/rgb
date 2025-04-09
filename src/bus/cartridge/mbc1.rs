@@ -1,3 +1,8 @@
+use anyhow::Result;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
+
 use super::Mapper;
 
 pub struct MBC1 {
@@ -124,5 +129,18 @@ impl Mapper for MBC1Ram {
             }
             _ => unreachable!(),
         }
+    }
+
+    fn save_external_ram(&self, filename: &Path) -> Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(&self.ram)?;
+        Ok(())
+    }
+
+    fn load_external_ram(&mut self, filename: &Path) -> Result<()> {
+        if let Ok(mut file) = File::open(filename) {
+            file.read_exact(&mut self.ram)?;
+        }
+        Ok(())
     }
 }

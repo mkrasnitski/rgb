@@ -4,7 +4,7 @@ pub mod joypad;
 use crate::apu::Apu;
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
-use cartridge::*;
+pub use cartridge::*;
 use joypad::Joypad;
 
 pub struct Timers {
@@ -85,10 +85,10 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>) -> Self {
+    pub fn new(bootrom: [u8; 0x100], cartridge: Cartridge) -> Self {
         Self {
             bootrom,
-            cartridge: Cartridge::new(cartridge),
+            cartridge,
             apu: Apu::new(),
             ppu: Ppu::new(),
             wram: vec![0; 0x2000].try_into().unwrap(),

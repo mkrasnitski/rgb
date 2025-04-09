@@ -1,3 +1,6 @@
+use anyhow::Result;
+use std::path::{Path, PathBuf};
+
 mod mbc1;
 mod mbc2;
 mod mbc3;
@@ -13,6 +16,14 @@ trait Mapper {
     fn write(&mut self, addr: u16, val: u8);
 
     fn increment_rtc(&mut self) {}
+
+    fn save_external_ram(&self, _: &Path) -> Result<()> {
+        Ok(())
+    }
+
+    fn load_external_ram(&mut self, _: &Path) -> Result<()> {
+        Ok(())
+    }
 }
 
 struct NoMapper {
@@ -29,10 +40,19 @@ impl Mapper for NoMapper {
 
 pub struct Cartridge {
     mapper: Box<dyn Mapper>,
+    save_path: PathBuf,
 }
 
 impl Cartridge {
-    pub fn new(rom: Vec<u8>) -> Self {
+    pub fn new(rom_path: PathBuf, saves_dir: PathBuf) -> Result<Self> {
+        let rom = std::fs::read(&rom_path)?;
+        let rom_name = rom_path.file_stem().unwrap();
+
+        std::fs::create_dir_all(&saves_dir)?;
+        let mut save_path = saves_dir;
+        save_path.push(rom_name);
+        save_path.set_extension("sav");
+
         let mbc = rom[0x147];
         let rom_type = rom[0x148];
         let ram_type = rom[0x149];
@@ -66,7 +86,7 @@ impl Cartridge {
             0x1a | 0x1b => Box::new(MBC5Ram::new(rom, num_banks, 1024 * ram_size_kb)),
             _ => panic!("Invalid mapper value: {mbc:02x}"),
         };
-        Self { mapper }
+        Ok(Self { mapper, save_path })
     }
 
     pub fn read(&self, addr: u16) -> u8 {
@@ -79,5 +99,13 @@ impl Cartridge {
 
     pub fn increment_rtc(&mut self) {
         self.mapper.increment_rtc();
+    }
+
+    pub fn save_external_ram(&self) -> Result<()> {
+        self.mapper.save_external_ram(&self.save_path)
+    }
+
+    pub fn load_external_ram(&mut self) -> Result<()> {
+        self.mapper.load_external_ram(&self.save_path)
     }
 }

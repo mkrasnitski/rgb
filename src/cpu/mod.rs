@@ -1,13 +1,14 @@
+use anyhow::{Result, bail};
+use num_traits::FromPrimitive;
+
 mod instruction;
 mod registers;
 
-use crate::bus::MemoryBus;
 use crate::bus::joypad::Joypad;
+use crate::bus::{Cartridge, MemoryBus};
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
-use anyhow::{Result, bail};
 use instruction::*;
-use num_traits::FromPrimitive;
 use registers::{Reg8, Reg16, RegWrite, Registers};
 
 pub struct Cpu {
@@ -29,7 +30,12 @@ enum Interrupt {
 }
 
 impl Cpu {
-    pub fn new(bootrom: [u8; 0x100], cartridge: Vec<u8>, skip_bootrom: bool, debug: bool) -> Self {
+    pub fn new(
+        bootrom: [u8; 0x100],
+        cartridge: Cartridge,
+        skip_bootrom: bool,
+        debug: bool,
+    ) -> Self {
         let mut cpu = Self {
             memory: MemoryBus::new(bootrom, cartridge),
             registers: Registers::default(),
@@ -68,6 +74,10 @@ impl Cpu {
             cpu.memory.write(0xff50, 0x01);
         }
         cpu
+    }
+
+    pub fn save_external_ram(&self) -> Result<()> {
+        self.memory.cartridge.save_external_ram()
     }
 
     pub fn run_frame(&mut self) -> Result<()> {

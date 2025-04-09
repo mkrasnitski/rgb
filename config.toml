@@ -1,4 +1,5 @@
 bootrom = "dmg_boot.bin"
+saves_dir = "saves"
 
 [hotkeys.joypad]
 up = "up"
