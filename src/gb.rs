@@ -1,12 +1,14 @@
-use crate::config::{Args, Config};
-use crate::cpu::Cpu;
-use crate::display::{Display, DisplayEvent};
-use crate::hotkeys::Hotkey;
 use anyhow::Result;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
+
+use crate::bus::Cartridge;
+use crate::config::{Args, Config};
+use crate::cpu::Cpu;
+use crate::display::{Display, DisplayEvent};
+use crate::hotkeys::Hotkey;
 
 const WIDTH: u32 = 160;
 const HEIGHT: u32 = 144;
@@ -22,7 +24,8 @@ impl Gameboy {
         let bootrom = std::fs::read(config.bootrom)?
             .try_into()
             .expect("Bootrom not 0x100 in length");
-        let cartridge = std::fs::read(args.cartridge)?;
+        let mut cartridge = Cartridge::new(args.cartridge, config.saves_dir)?;
+        cartridge.load_external_ram()?;
         let cpu = Cpu::new(bootrom, cartridge, args.skip_bootrom, args.debug);
         Ok(Self { cpu, display })
     }
@@ -56,7 +59,12 @@ impl ApplicationHandler for Gameboy {
                         }
                     }
                 },
-                DisplayEvent::Quit => event_loop.exit(),
+                DisplayEvent::Quit => {
+                    if let Err(e) = self.cpu.save_external_ram() {
+                        println!("Failed to save: {e:?}");
+                    }
+                    event_loop.exit()
+                }
             }
         }
     }

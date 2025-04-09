@@ -1,4 +1,6 @@
 Cargo.lock
 /target
 /tests
+/roms
+/saves
 dmg_boot.bin
