@@ -26,6 +26,7 @@ pub struct Args {
 #[derive(Deserialize)]
 pub struct Config {
     pub bootrom: String,
+    pub saves_dir: PathBuf,
     #[serde(rename = "hotkeys")]
     keybindings: Keybindings,
 }
@@ -43,6 +44,7 @@ impl Config {
                 println!("Using default config.");
                 Config {
                     bootrom: "dmg_boot.bin".to_string(),
+                    saves_dir: "saves".into(),
                     keybindings: Keybindings::default(),
                 }
             }

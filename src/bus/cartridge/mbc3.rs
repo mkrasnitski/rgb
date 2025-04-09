@@ -1,3 +1,8 @@
+use anyhow::Result;
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
+
 use super::Mapper;
 use crate::utils::BitExtract;
 
@@ -82,6 +87,19 @@ impl Mapper for MBC3Ram {
             _ => unreachable!(),
         }
     }
+
+    fn save_external_ram(&self, filename: &Path) -> Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(&self.ram)?;
+        Ok(())
+    }
+
+    fn load_external_ram(&mut self, filename: &Path) -> Result<()> {
+        if let Ok(mut file) = File::open(filename) {
+            file.read_exact(&mut self.ram)?;
+        }
+        Ok(())
+    }
 }
 
 pub struct MBC3Rtc {
@@ -143,6 +161,24 @@ impl Mapper for MBC3Rtc {
 
     fn increment_rtc(&mut self) {
         self.rtc.increment();
+    }
+
+    fn save_external_ram(&self, filename: &Path) -> Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(&self.rtc.internal_state.as_bytes())?;
+        file.write_all(&self.rtc.latched_state.as_bytes())?;
+        Ok(())
+    }
+
+    fn load_external_ram(&mut self, filename: &Path) -> Result<()> {
+        if let Ok(mut file) = File::open(filename) {
+            let mut bytes = [0; 5];
+            file.read_exact(&mut bytes)?;
+            self.rtc.internal_state = RtcState::from_bytes(bytes);
+            file.read_exact(&mut bytes)?;
+            self.rtc.latched_state = RtcState::from_bytes(bytes);
+        }
+        Ok(())
     }
 }
 
@@ -220,6 +256,27 @@ impl Mapper for MBC3RamRtc {
     fn increment_rtc(&mut self) {
         self.rtc.increment();
     }
+
+    fn save_external_ram(&self, filename: &Path) -> Result<()> {
+        let mut file = File::create(filename)?;
+        file.write_all(&self.ram)?;
+        file.write_all(&self.rtc.internal_state.as_bytes())?;
+        file.write_all(&self.rtc.latched_state.as_bytes())?;
+        Ok(())
+    }
+
+    fn load_external_ram(&mut self, filename: &Path) -> Result<()> {
+        if let Ok(mut file) = File::open(filename) {
+            file.read_exact(&mut self.ram)?;
+
+            let mut bytes = [0; 5];
+            file.read_exact(&mut bytes)?;
+            self.rtc.internal_state = RtcState::from_bytes(bytes);
+            file.read_exact(&mut bytes)?;
+            self.rtc.latched_state = RtcState::from_bytes(bytes);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Default)]
@@ -228,6 +285,23 @@ struct RtcState {
     minutes: u8,
     hours: u8,
     days: u16,
+}
+
+impl RtcState {
+    fn from_bytes(bytes: [u8; 5]) -> Self {
+        let [seconds, minutes, hours, days_hi, days_lo] = bytes;
+        Self {
+            seconds,
+            minutes,
+            hours,
+            days: u16::from_be_bytes([days_hi, days_lo]),
+        }
+    }
+
+    fn as_bytes(&self) -> [u8; 5] {
+        let [days_hi, days_lo] = self.days.to_be_bytes();
+        [self.seconds, self.minutes, self.hours, days_lo, days_hi]
+    }
 }
 
 #[derive(Default)]
