@@ -26,7 +26,7 @@ impl Channel4 {
                     | self.volume.pace
             }
             0xff22 => (self.clock_shift << 4) | ((self.lfsr_width as u8) << 3) | self.clock_divider,
-            0xff23 => ((self.length.enable as u8) << 6) | 0xbf,
+            0xff23 => ((self.length.is_enabled() as u8) << 6) | 0xbf,
 
             _ => unreachable!(),
         }
@@ -51,9 +51,13 @@ impl Channel4 {
                 self.clock_shift = val >> 4;
             }
             0xff23 => {
-                self.length.enable = val.bit(6);
-                if val.bit(7) && self.dac_enabled {
-                    self.trigger = true;
+                if self.length.set_enable(val.bit(6)) {
+                    self.trigger = false;
+                }
+                if val.bit(7) {
+                    if self.dac_enabled {
+                        self.trigger = true;
+                    }
                     self.lfsr = 0x7fff;
                     self.length.trigger();
                     self.volume.trigger();
@@ -90,7 +94,7 @@ impl Channel4 {
 
     pub fn tick_frame_sequencer(&mut self) {
         self.frame_sequence = (self.frame_sequence + 1) % 8;
-        if self.frame_sequence % 2 == 0 && self.length.tick() {
+        if self.length.tick() {
             self.trigger = false;
         }
         if self.frame_sequence == 7 {

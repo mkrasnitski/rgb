@@ -33,7 +33,7 @@ impl Channel1 {
                     | self.volume.pace
             }
             0xff13 => 0xff,
-            0xff14 => ((self.length.enable as u8) << 6) | 0xbf,
+            0xff14 => ((self.length.is_enabled() as u8) << 6) | 0xbf,
             _ => unreachable!(),
         }
     }
@@ -68,10 +68,15 @@ impl Channel1 {
             0xff14 => {
                 self.period &= 0xff;
                 self.period |= ((val & 0b111) as u16) << 8;
-                self.length.enable = val.bit(6);
 
-                if val.bit(7) && self.dac_enabled {
-                    self.trigger = true;
+                if self.length.set_enable(val.bit(6)) {
+                    self.trigger = false;
+                }
+
+                if val.bit(7) {
+                    if self.dac_enabled {
+                        self.trigger = true;
+                    }
                     self.period_counter = self.period;
                     self.length.trigger();
                     self.volume.trigger();
@@ -100,7 +105,7 @@ impl Channel1 {
 
     pub fn tick_frame_sequencer(&mut self) {
         self.frame_sequence = (self.frame_sequence + 1) % 8;
-        if self.frame_sequence % 2 == 0 && self.length.tick() {
+        if self.length.tick() {
             self.trigger = false;
         }
         if self.frame_sequence == 7 {

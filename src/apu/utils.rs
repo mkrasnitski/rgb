@@ -1,13 +1,13 @@
-#[derive(Default)]
 pub struct LengthCounter<const N: u16> {
-    pub enable: bool,
+    enable: bool,
     timer: u16,
+    tick: bool,
 }
 
 impl<const N: u16> LengthCounter<N> {
     pub fn trigger(&mut self) {
         if self.timer == 0 {
-            self.timer = N;
+            self.timer = if self.tick && self.enable { N - 1 } else { N };
         }
     }
 
@@ -15,12 +15,37 @@ impl<const N: u16> LengthCounter<N> {
         self.timer = N - val as u16;
     }
 
+    pub fn set_enable(&mut self, enable: bool) -> bool {
+        let extra_clock = self.tick && enable && !self.enable;
+        self.enable = enable;
+        if extra_clock { self.clock() } else { false }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.enable
+    }
+
     pub fn tick(&mut self) -> bool {
+        self.tick = !self.tick;
+        self.tick && self.clock()
+    }
+
+    fn clock(&mut self) -> bool {
         if self.enable {
             self.timer = self.timer.saturating_sub(1);
             self.timer == 0
         } else {
             false
+        }
+    }
+}
+
+impl<const N: u16> Default for LengthCounter<N> {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            timer: 0,
+            tick: true,
         }
     }
 }

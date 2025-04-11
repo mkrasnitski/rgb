@@ -10,7 +10,6 @@ pub struct Channel3 {
 
     sample_index: u8,
     period_counter: u16,
-    frame_sequence: u8,
     length: LengthCounter<256>,
 }
 
@@ -21,7 +20,7 @@ impl Channel3 {
             0xff1b => 0xff,
             0xff1c => (self.volume << 5) | 0x9f,
             0xff1d => 0xff,
-            0xff1e => ((self.length.enable as u8) << 6) | 0xbf,
+            0xff1e => ((self.length.is_enabled() as u8) << 6) | 0xbf,
 
             _ => unreachable!(),
         }
@@ -44,10 +43,15 @@ impl Channel3 {
             0xff1e => {
                 self.period &= 0xff;
                 self.period |= ((val & 0b111) as u16) << 8;
-                self.length.enable = val.bit(6);
 
-                if val.bit(7) && self.dac_enabled {
-                    self.trigger = true;
+                if self.length.set_enable(val.bit(6)) {
+                    self.trigger = false;
+                }
+
+                if val.bit(7) {
+                    if self.dac_enabled {
+                        self.trigger = true;
+                    }
                     self.length.trigger();
                 }
             }
@@ -71,8 +75,7 @@ impl Channel3 {
     }
 
     pub fn tick_frame_sequencer(&mut self) {
-        self.frame_sequence = (self.frame_sequence + 1) % 8;
-        if self.frame_sequence % 2 == 0 && self.length.tick() {
+        if self.length.tick() {
             self.trigger = false;
         }
     }
