@@ -16,10 +16,13 @@ pub struct Args {
     #[arg(long)]
     pub skip_bootrom: bool,
 
+    #[arg(short, long, default_value = "config.toml", help = "Config file")]
+    pub config: PathBuf,
+
     #[arg(short, long, help = "Enable debug logs")]
     pub debug: bool,
 
-    #[arg(long, help = "Scale factor", default_value = "3")]
+    #[arg(short, long, help = "Scale factor", default_value = "3")]
     pub scale: u32,
 }
 
