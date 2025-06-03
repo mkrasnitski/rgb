@@ -33,11 +33,12 @@ impl Cpu {
     pub fn new(
         bootrom: [u8; 0x100],
         cartridge: Cartridge,
+        audio_volume: f32,
         skip_bootrom: bool,
         debug: bool,
     ) -> Self {
         let mut cpu = Self {
-            memory: MemoryBus::new(bootrom, cartridge),
+            memory: MemoryBus::new(bootrom, cartridge, audio_volume),
             registers: Registers::default(),
             cycles: 0,
             ime: false,

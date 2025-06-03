@@ -17,7 +17,7 @@ use clap::Parser;
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let config = Config::new("config.toml".as_ref())?;
+    let config = Config::new(args.config.as_ref())?;
     let mut gb = Gameboy::new(args, config)?;
     let event_loop = EventLoop::new()?;
     event_loop.run_app(&mut gb)?;
