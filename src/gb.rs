@@ -26,7 +26,13 @@ impl Gameboy {
             .expect("Bootrom not 0x100 in length");
         let mut cartridge = Cartridge::new(args.cartridge, config.saves_dir)?;
         cartridge.load_external_ram()?;
-        let cpu = Cpu::new(bootrom, cartridge, args.skip_bootrom, args.debug);
+        let cpu = Cpu::new(
+            bootrom,
+            cartridge,
+            config.audio_volume,
+            args.skip_bootrom,
+            args.debug,
+        );
         Ok(Self { cpu, display })
     }
 }

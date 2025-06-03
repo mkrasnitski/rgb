@@ -66,9 +66,9 @@ impl Panning {
 }
 
 impl Apu {
-    pub fn new() -> Self {
+    pub fn new(volume: f32) -> Self {
         let (sample_tx, sample_rx) = channel();
-        std::thread::spawn(move || spawn_audio(sample_rx));
+        std::thread::spawn(move || spawn_audio(sample_rx, volume));
         Self {
             sampler: Sampler::new(sample_tx),
             channel1: Default::default(),
@@ -202,7 +202,7 @@ impl Apu {
     }
 }
 
-fn spawn_audio(sample_rx: Receiver<(f32, f32)>) -> Result<()> {
+fn spawn_audio(sample_rx: Receiver<(f32, f32)>, volume: f32) -> Result<()> {
     let host = cpal::default_host();
     let device = host
         .default_output_device()
@@ -218,8 +218,8 @@ fn spawn_audio(sample_rx: Receiver<(f32, f32)>) -> Result<()> {
         move |data: &mut [f32], _| {
             for frame in data.chunks_mut(2) {
                 if let Ok((left, right)) = sample_rx.recv() {
-                    frame[0] = left;
-                    frame[1] = right;
+                    frame[0] = left * volume / 100.0;
+                    frame[1] = right * volume / 100.0;
                 }
             }
         },
@@ -277,7 +277,7 @@ impl Sampler {
                 .try_into()
                 .unwrap();
             for sample in samples {
-                self.sample_tx.send(sample).unwrap();
+                let _ = self.sample_tx.send(sample);
             }
             self.sample_buffer.clear();
             self.instant = Instant::now();
