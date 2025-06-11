@@ -1,5 +1,6 @@
 use anyhow::{Result, bail};
 use num_traits::FromPrimitive;
+use std::io::{BufWriter, Write};
 
 mod instruction;
 mod registers;
@@ -17,7 +18,7 @@ pub struct Cpu {
     cycles: u64,
     ime: bool,
     halted: bool,
-    debug: bool,
+    logfile: Option<BufWriter<Box<dyn Write>>>,
 }
 
 enum Interrupt {
@@ -35,7 +36,7 @@ impl Cpu {
         cartridge: Cartridge,
         audio_volume: f32,
         skip_bootrom: bool,
-        debug: bool,
+        logfile: Option<Box<dyn Write>>,
     ) -> Self {
         let mut cpu = Self {
             memory: MemoryBus::new(bootrom, cartridge, audio_volume),
@@ -43,7 +44,7 @@ impl Cpu {
             cycles: 0,
             ime: false,
             halted: false,
-            debug,
+            logfile: logfile.map(BufWriter::new),
         };
 
         if skip_bootrom {
@@ -97,19 +98,12 @@ impl Cpu {
         } else {
             let instr = self.decode_instr()?;
             let len = instr.length() as u16;
-            if self.debug {
-                let bytes = {
-                    (self.registers.pc..self.registers.pc + len)
-                        .map(|addr| format!("{:02x}", self.memory.read(addr)))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                };
-                println!(
-                    "{} | {:04X} | {bytes:>8} | {:?} | {instr:?}",
-                    self.cycles,
-                    self.registers.pc,
-                    instr.mcycles(),
-                );
+            if let Some(logfile) = self.logfile.as_mut() {
+                writeln!(
+                    logfile,
+                    "{} | {:?} | {instr:?}",
+                    self.cycles, self.registers
+                )?;
             }
             self.registers.pc += len;
             let cycles = self.execute_instr(instr);

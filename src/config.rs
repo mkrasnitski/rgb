@@ -20,7 +20,7 @@ pub struct Args {
     pub config: PathBuf,
 
     #[arg(short, long, help = "Enable debug logs")]
-    pub debug: bool,
+    pub logfile: Option<PathBuf>,
 
     #[arg(short, long, help = "Scale factor", default_value = "3")]
     pub scale: u32,

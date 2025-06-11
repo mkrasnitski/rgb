@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Default)]
 pub struct Registers {
     a: u8,
@@ -58,6 +60,16 @@ impl Registers {
     }
 }
 
+impl fmt::Debug for Registers {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{:04x} {:04x} {:?} [{:02x} {:02x} {:02x} {:02x} {:02x} {:02x} {:02x}]",
+            self.pc, self.sp, self.flags, self.a, self.b, self.c, self.d, self.e, self.h, self.l
+        )
+    }
+}
+
 #[derive(Copy, Clone, Default)]
 pub struct Flags {
     pub z: bool,
@@ -80,6 +92,16 @@ impl From<u8> for Flags {
 impl From<Flags> for u8 {
     fn from(f: Flags) -> Self {
         ((f.z as u8) << 7) | ((f.n as u8) << 6) | ((f.h as u8) << 5) | ((f.c as u8) << 4)
+    }
+}
+
+impl fmt::Debug for Flags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let z = if self.z { "Z" } else { "-" };
+        let n = if self.n { "N" } else { "-" };
+        let h = if self.h { "H" } else { "-" };
+        let c = if self.c { "C" } else { "-" };
+        write!(f, "{z}{n}{h}{c}")
     }
 }
 

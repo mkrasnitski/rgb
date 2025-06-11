@@ -4,3 +4,4 @@ Cargo.lock
 /roms
 /saves
 dmg_boot.bin
+*.log

@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::fs::File;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -26,12 +27,22 @@ impl Gameboy {
             .expect("Bootrom not 0x100 in length");
         let mut cartridge = Cartridge::new(args.cartridge, config.saves_dir)?;
         cartridge.load_external_ram()?;
+        let logfile = args
+            .logfile
+            .map(|path| {
+                if path.display().to_string() == "-" {
+                    Ok(Box::new(std::io::stdout()) as Box<_>)
+                } else {
+                    File::create(path).map(|file| Box::new(file) as Box<_>)
+                }
+            })
+            .transpose()?;
         let cpu = Cpu::new(
             bootrom,
             cartridge,
             config.audio_volume,
             args.skip_bootrom,
-            args.debug,
+            logfile,
         );
         Ok(Self { cpu, display })
     }

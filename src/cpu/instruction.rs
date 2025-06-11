@@ -354,11 +354,11 @@ impl fmt::Debug for Instruction {
                 LdType::IndFromA(ind) => write!(f, "LD {ind:?}, A"),
                 LdType::AFromIoReg(io) => match io {
                     Io::C => write!(f, "LD A, (FF00 + C)"),
-                    Io::Imm(val) => write!(f, "LD A, ($FF00 + ${val:02x})"),
+                    Io::Imm(val) => write!(f, "LD A, (${:04x})", 0xff00 + *val as u16),
                 },
                 LdType::IoRegFromA(io) => match io {
                     Io::C => write!(f, "LD (FF00 + C), A"),
-                    Io::Imm(val) => write!(f, "LD ($FF00 + ${val:02x}), A"),
+                    Io::Imm(val) => write!(f, "LD (${:04x}), A", 0xff00 + *val as u16),
                 },
                 LdType::AFromMem(val) => write!(f, "LD A, (${val:04x})"),
                 LdType::MemFromA(val) => write!(f, "LD (${val:04x}), A"),
@@ -403,10 +403,10 @@ impl fmt::Debug for Instruction {
 
             Jr(cond, val) => write!(f, "JR {cond:?}, {val:+}"),
             JrAlways(val) => write!(f, "JR {val:+}"),
-            Jp(cond, val) => write!(f, "JP {cond:?}, {val:04X}"),
-            JpAlways(val) => write!(f, "JP {val:04X}"),
-            Call(cond, val) => write!(f, "CALL {cond:?}, {val:04X}"),
-            CallAlways(val) => write!(f, "CALL {val:04X}"),
+            Jp(cond, val) => write!(f, "JP {cond:?}, {val:04x}"),
+            JpAlways(val) => write!(f, "JP {val:04x}"),
+            Call(cond, val) => write!(f, "CALL {cond:?}, {val:04x}"),
+            CallAlways(val) => write!(f, "CALL {val:04x}"),
             Ret(cond) => write!(f, "RET {cond:?}"),
             RetAlways => write!(f, "RET"),
             Rst(val) => write!(f, "RST ${val:02x}"),
