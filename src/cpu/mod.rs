@@ -137,6 +137,7 @@ impl Cpu {
     }
 
     fn mtick(&mut self) {
+        self.memory.tick_dma();
         if self.memory.timers.increment(&mut self.memory.apu) {
             self.request_interrupt(Interrupt::Timer);
         }

@@ -73,12 +73,12 @@ pub struct MemoryBus {
     bootrom: [u8; 0x100],
     pub cartridge: Cartridge,
     ppu: Ppu,
+    dma: Dma,
     pub apu: Apu,
     wram: Box<[u8; 0x2000]>,
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
     pub joypad: Joypad,
-    dma_base: u8,
     bootrom_enabled: bool,
     pub int_flag: u8,
     pub int_enable: u8,
@@ -91,11 +91,11 @@ impl MemoryBus {
             cartridge,
             apu: Apu::new(audio_volume),
             ppu: Ppu::new(),
+            dma: Dma::default(),
             wram: vec![0; 0x2000].try_into().unwrap(),
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
-            dma_base: 0,
             bootrom_enabled: true,
             int_flag: 0xE0,
             int_enable: 0,
@@ -110,7 +110,13 @@ impl MemoryBus {
             0xa000..=0xbfff => self.cartridge.read(addr),
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000],
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000],
-            0xfe00..=0xfe9f => self.ppu.read(addr),
+            0xfe00..=0xfe9f => {
+                if self.dma.slot.is_some() {
+                    0xff
+                } else {
+                    self.ppu.read_oam(addr as usize - 0xfe00)
+                }
+            }
             0xfea0..=0xfeff => 0x00,
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80],
 
@@ -129,7 +135,7 @@ impl MemoryBus {
 
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.read(addr),
 
-            0xff46 => self.dma_base,
+            0xff46 => self.dma.base,
             0xff50 => 0xff,
 
             0xff0f => self.int_flag | 0xe0,
@@ -150,14 +156,6 @@ impl MemoryBus {
         }
     }
 
-    // During DMA, the entire region E000-FFFF is treated as echo ram, instead of E000-FDFF
-    fn read_dma(&self, addr: u16) -> u8 {
-        match addr {
-            0x0000..=0xdfff => self.read(addr),
-            0xe000..=0xffff => self.wram[addr as usize - 0xe000],
-        }
-    }
-
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x0000..=0x7fff => self.cartridge.write(addr, val),
@@ -165,7 +163,12 @@ impl MemoryBus {
             0xa000..=0xbfff => self.cartridge.write(addr, val),
             0xc000..=0xdfff => self.wram[addr as usize - 0xc000] = val,
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000] = val,
-            0xfe00..=0xfe9f => self.ppu.write(addr, val),
+            0xfe00..=0xfe9f => {
+                if self.dma.slot.is_none() {
+                    let [_, slot] = addr.to_be_bytes();
+                    self.ppu.write_oam(slot, val);
+                }
+            }
             0xfea0..=0xfeff => {}
             0xff80..=0xfffe => self.hram[addr as usize - 0xff80] = val,
 
@@ -188,12 +191,8 @@ impl MemoryBus {
             0xff40..=0xff45 | 0xff47..=0xff4b => self.ppu.write(addr, val),
 
             0xff46 => {
-                // All at once rather than one byte per cycle (160 total), and no lockout
-                self.dma_base = val;
-                for i in 0..0xa0 {
-                    self.ppu
-                        .write_dma(i, self.read_dma(u16::from_be_bytes([self.dma_base, i])));
-                }
+                self.dma.base = val;
+                self.dma.enabled = true;
             }
             0xff50 => {
                 if self.bootrom_enabled && val & 1 == 1 {
@@ -215,7 +214,45 @@ impl MemoryBus {
         }
     }
 
+    pub fn tick_dma(&mut self) {
+        if let Some((slot, addr)) = self.dma.tick() {
+            let val = match addr {
+                0x0000..=0xdfff => self.read(addr),
+                0xe000..=0xffff => self.wram[addr as usize - 0xe000],
+            };
+            self.ppu.write_dma(slot, val);
+        }
+    }
+
     pub fn ppu_mut(&mut self) -> &mut Ppu {
         &mut self.ppu
+    }
+}
+
+#[derive(Default)]
+struct Dma {
+    base: u8,
+    enabled: bool,
+    slot: Option<u8>,
+}
+
+impl Dma {
+    fn tick(&mut self) -> Option<(u8, u16)> {
+        if self.enabled {
+            match self.slot {
+                Some(slot) => {
+                    let addr = u16::from_be_bytes([self.base, slot]);
+                    if slot == 0x9f {
+                        self.enabled = false;
+                        self.slot = None;
+                    } else {
+                        self.slot = Some(slot + 1);
+                    }
+                    return Some((slot, addr));
+                }
+                None => self.slot = Some(0),
+            }
+        }
+        None
     }
 }

@@ -110,10 +110,6 @@ impl Ppu {
                 PpuMode::Drawing => 0xff,
                 _ => self.read_vram(addr),
             },
-            0xfe00..=0xfe9f => match self.mode {
-                PpuMode::OamScan | PpuMode::Drawing => 0xff,
-                _ => self.oam_ram[addr as usize - 0xfe00],
-            },
             0xff40 => self.LCDC,
             0xff41 => self.STAT,
             0xff42 => self.SCY,
@@ -129,6 +125,13 @@ impl Ppu {
         }
     }
 
+    pub fn read_oam(&self, slot: usize) -> u8 {
+        match self.mode {
+            PpuMode::OamScan | PpuMode::Drawing => 0xff,
+            _ => self.oam_ram[slot],
+        }
+    }
+
     fn read_vram(&self, idx: u16) -> u8 {
         self.vram[idx as usize - 0x8000]
     }
@@ -138,10 +141,6 @@ impl Ppu {
             0x8000..=0x9fff => match self.mode {
                 PpuMode::Drawing => {}
                 _ => self.vram[addr as usize - 0x8000] = val,
-            },
-            0xfe00..=0xfe9f => match self.mode {
-                PpuMode::OamScan | PpuMode::Drawing => {}
-                _ => self.oam_ram[addr as usize - 0xfe00] = val,
             },
             0xff40 => {
                 if val.bit(7) && !self.LCDC.bit(7) {
@@ -163,6 +162,13 @@ impl Ppu {
             0xff4a => self.WY = val,
             0xff4b => self.WX = val,
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#02x}"),
+        }
+    }
+
+    pub fn write_oam(&mut self, slot: u8, val: u8) {
+        match self.mode {
+            PpuMode::OamScan | PpuMode::Drawing => {}
+            _ => self.write_dma(slot, val),
         }
     }
 
