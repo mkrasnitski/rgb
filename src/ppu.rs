@@ -107,7 +107,8 @@ impl Ppu {
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0x8000..=0x9fff => match self.mode {
-                PpuMode::Drawing => 0xff,
+                // FIXME: Enable after implementing variable mode 3 length
+                // PpuMode::Drawing => 0xff,
                 _ => self.read_vram(addr),
             },
             0xff40 => self.LCDC,
@@ -139,7 +140,8 @@ impl Ppu {
     pub fn write(&mut self, addr: u16, val: u8) {
         match addr {
             0x8000..=0x9fff => match self.mode {
-                PpuMode::Drawing => {}
+                // FIXME: Enable after implementing variable mode 3 length
+                // PpuMode::Drawing => {}
                 _ => self.vram[addr as usize - 0x8000] = val,
             },
             0xff40 => {
@@ -214,8 +216,21 @@ impl Ppu {
             if clocks == 0 {
                 self.oam_sprites.clear();
                 self.set_mode(PpuMode::OamScan);
-                // All at once rather than two sprites per cycle
-                for i in 0..40 {
+            } else if clocks == 20 {
+                self.set_mode(PpuMode::Drawing);
+                self.draw_line();
+            } else {
+                // TODO: Variable mode 3 length
+                if clocks == 63 {
+                    self.set_mode(PpuMode::HBlank);
+                }
+            }
+
+            // OAM scan
+            if clocks < 20 {
+                // Fetch two sprites per cycle
+                let oam_index = 2 * clocks as usize;
+                for i in oam_index..oam_index + 2 {
                     if self.oam_sprites.len() < 10 {
                         if let Some(sprite) = self.fetch_sprite(i) {
                             let idx = self
@@ -226,11 +241,6 @@ impl Ppu {
                         }
                     }
                 }
-            } else if clocks == 20 {
-                self.set_mode(PpuMode::Drawing);
-                self.draw_line();
-            } else if clocks == 63 {
-                self.set_mode(PpuMode::HBlank);
             }
         } else if scanline == 144 && clocks == 0 {
             self.set_mode(PpuMode::VBlank);
