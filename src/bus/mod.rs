@@ -70,7 +70,7 @@ impl Timers {
 }
 
 pub struct MemoryBus {
-    bootrom: [u8; 0x100],
+    bootrom: Option<[u8; 0x100]>,
     pub cartridge: Cartridge,
     ppu: Ppu,
     dma: Dma,
@@ -85,7 +85,7 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(bootrom: [u8; 0x100], cartridge: Cartridge, audio_volume: f32) -> Self {
+    pub fn new(bootrom: Option<[u8; 0x100]>, cartridge: Cartridge, audio_volume: f32) -> Self {
         Self {
             bootrom,
             cartridge,
@@ -96,7 +96,7 @@ impl MemoryBus {
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
-            bootrom_enabled: true,
+            bootrom_enabled: bootrom.is_some(),
             int_flag: 0xE0,
             int_enable: 0,
         }
@@ -104,7 +104,13 @@ impl MemoryBus {
 
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
-            0x0000..=0x00ff if self.bootrom_enabled => self.bootrom[addr as usize],
+            0x0000..=0x00ff if self.bootrom_enabled => {
+                if let Some(bootrom) = self.bootrom {
+                    bootrom[addr as usize]
+                } else {
+                    self.cartridge.read(addr)
+                }
+            }
             0x0000..=0x7fff => self.cartridge.read(addr),
             0x8000..=0x9fff => self.ppu.read(addr),
             0xa000..=0xbfff => self.cartridge.read(addr),

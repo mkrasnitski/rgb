@@ -22,9 +22,15 @@ pub struct Gameboy {
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
         let display = Display::new(config.keymap(), args.scale);
-        let bootrom = std::fs::read(config.bootrom)?
-            .try_into()
-            .expect("Bootrom not 0x100 in length");
+        let bootrom = if args.skip_bootrom {
+            None
+        } else {
+            Some(
+                std::fs::read(config.bootrom)?
+                    .try_into()
+                    .expect("Bootrom not 0x100 in length"),
+            )
+        };
         let mut cartridge = Cartridge::new(args.cartridge, config.saves_dir)?;
         cartridge.load_external_ram()?;
         let logfile = args
@@ -37,13 +43,7 @@ impl Gameboy {
                 }
             })
             .transpose()?;
-        let cpu = Cpu::new(
-            bootrom,
-            cartridge,
-            config.audio_volume,
-            args.skip_bootrom,
-            logfile,
-        );
+        let cpu = Cpu::new(bootrom, cartridge, config.audio_volume, logfile);
         Ok(Self { cpu, display })
     }
 }
