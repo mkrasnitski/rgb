@@ -231,14 +231,14 @@ impl Ppu {
                 // Fetch two sprites per cycle
                 let oam_index = 2 * clocks as usize;
                 for i in oam_index..oam_index + 2 {
-                    if self.oam_sprites.len() < 10 {
-                        if let Some(sprite) = self.fetch_sprite(i) {
-                            let idx = self
-                                .oam_sprites
-                                .binary_search_by(|s| sprite.x.cmp(&s.x))
-                                .unwrap_or_else(|e| e);
-                            self.oam_sprites.insert(idx, sprite);
-                        }
+                    if let Some(sprite) = self.fetch_sprite(i)
+                        && self.oam_sprites.len() < 10
+                    {
+                        let idx = self
+                            .oam_sprites
+                            .binary_search_by(|s| sprite.x.cmp(&s.x))
+                            .unwrap_or_else(|e| e);
+                        self.oam_sprites.insert(idx, sprite);
                     }
                 }
             }

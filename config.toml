@@ -1,6 +1,6 @@
 bootrom = "dmg_boot.bin"
 saves_dir = "saves"
-volume = 100.0
+volume = 25.0
 
 [hotkeys.joypad]
 up = "up"

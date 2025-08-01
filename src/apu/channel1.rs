@@ -111,14 +111,14 @@ impl Channel1 {
         if self.frame_sequence == 7 {
             self.volume.tick();
         }
-        if self.frame_sequence == 2 || self.frame_sequence == 6 {
-            if let Some((next_period, disable)) = self.sweep.tick() {
-                if let Some(period) = next_period {
-                    self.period = period;
-                }
-                if disable {
-                    self.trigger = false;
-                }
+        if (self.frame_sequence == 2 || self.frame_sequence == 6)
+            && let Some((next_period, disable)) = self.sweep.tick()
+        {
+            if let Some(period) = next_period {
+                self.period = period;
+            }
+            if disable {
+                self.trigger = false;
             }
         }
     }

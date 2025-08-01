@@ -437,7 +437,7 @@ impl fmt::Debug for Indirect {
             f,
             "({})",
             match self {
-                Indirect::BC => "BE",
+                Indirect::BC => "BC",
                 Indirect::DE => "DE",
                 Indirect::HLInc => "HL+",
                 Indirect::HLDec => "HL-",

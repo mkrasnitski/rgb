@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use num_traits::FromPrimitive;
 use std::io::{BufWriter, Write};
 
@@ -50,7 +50,7 @@ impl Cpu {
             cpu.registers.write(RegWrite::AF(0x01b0));
             cpu.registers.write(RegWrite::BC(0x0013));
             cpu.registers.write(RegWrite::DE(0x00d8));
-            cpu.registers.write(RegWrite::HL(0x004d));
+            cpu.registers.write(RegWrite::HL(0x014d));
             cpu.registers.write(RegWrite::SP(0xfffe));
             cpu.registers.pc = 0x100;
             cpu.memory.write(0xff10, 0x80);
@@ -95,7 +95,7 @@ impl Cpu {
         if self.halted {
             self.mtick();
         } else {
-            let instr = self.decode_instr()?;
+            let instr = self.decode_instr();
             let len = instr.length() as u16;
             if let Some(logfile) = self.logfile.as_mut() {
                 writeln!(
@@ -166,8 +166,8 @@ impl Cpu {
         &mut self.memory.joypad
     }
 
-    fn decode_instr(&self) -> Result<Instruction> {
-        let byte = self.memory.read(self.registers.pc);
+    fn decode_instr(&self) -> Instruction {
+        let byte = self.read_opcode();
         let lo_3bit = byte & 0b111;
         let hi_3bit = (byte & 0b111111) >> 3;
         let hi_2bit = hi_3bit >> 1;
@@ -177,7 +177,7 @@ impl Cpu {
         let ind = Indirect::from_u8(hi_2bit).unwrap();
         let branch = BranchCond::from_u8(hi_3bit & 0b11).unwrap();
         let push_pop = PushPop::from_u8(hi_2bit).unwrap();
-        Ok(match byte {
+        match byte {
             0x00 => Instruction::Nop,
             0x01 | 0x11 | 0x21 | 0x31 => Instruction::Ld(LdType::R16Imm(r16, self.u16_arg())),
             0x02 | 0x12 | 0x22 | 0x32 => Instruction::Ld(LdType::IndFromA(ind)),
@@ -251,9 +251,9 @@ impl Cpu {
             0xf9 => Instruction::Ld(LdType::SPFromHL),
 
             0xd3 | 0xdb | 0xdd | 0xe3 | 0xe4 | 0xeb | 0xec | 0xed | 0xf4 | 0xfc | 0xfd => {
-                bail!("Crash opcode: {:02x}", byte)
+                panic!("Crash opcode: {byte:02x}")
             }
-        })
+        }
     }
 
     fn execute_instr(&mut self, instr: Instruction) -> u64 {
@@ -642,6 +642,10 @@ impl Cpu {
         }
     }
 
+    fn read_opcode(&self) -> u8 {
+        self.memory.read(self.registers.pc)
+    }
+
     fn u8_arg(&self) -> u8 {
         self.memory.read(self.registers.pc + 1)
     }
@@ -675,7 +679,7 @@ impl Cpu {
             R8::E => self.registers.write(RegWrite::E(val)),
             R8::H => self.registers.write(RegWrite::H(val)),
             R8::L => self.registers.write(RegWrite::L(val)),
-            R8::HLInd => self.memory.write(self.registers.reg16(Reg16::HL), val),
+            R8::HLInd => self.write_ind(MemIndirect::HL, val),
         }
     }
 
