@@ -1,5 +1,6 @@
 use anyhow::Result;
 use num_traits::FromPrimitive;
+use std::fmt;
 use std::io::{BufWriter, Write};
 
 mod instruction;
@@ -19,6 +20,12 @@ pub struct Cpu {
     ime: bool,
     halted: bool,
     logfile: Option<BufWriter<Box<dyn Write>>>,
+}
+
+impl fmt::Debug for Cpu {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} | {:?} ", self.cycles, self.registers)
+    }
 }
 
 enum Interrupt {
@@ -95,20 +102,20 @@ impl Cpu {
         if self.halted {
             self.mtick();
         } else {
+            let cycles = self.cycles;
+            let pc = self.registers.pc;
+            let state = self
+                .logfile
+                .is_some()
+                .then(|| format!("{self:?}"))
+                .unwrap_or_default();
             let instr = self.decode_instr();
-            let len = instr.length() as u16;
             if let Some(logfile) = self.logfile.as_mut() {
-                writeln!(
-                    logfile,
-                    "{} | {:?} | {instr:?}",
-                    self.cycles, self.registers
-                )?;
+                writeln!(logfile, "{state} {instr:?}")?;
             }
-            self.registers.pc += len;
-            let cycles = self.execute_instr(instr);
-            for _ in 0..cycles {
-                self.mtick();
-            }
+            assert_eq!(instr.length() as u16, self.registers.pc - pc);
+            let instr_cycles = self.execute_instr(instr);
+            assert_eq!(instr_cycles, self.cycles - cycles);
         }
         Ok(())
     }
@@ -119,10 +126,13 @@ impl Cpu {
             if int.bit(i) {
                 self.halted = false;
                 if self.ime {
+                    self.mtick();
+                    self.mtick();
                     self.memory.int_flag &= !(1 << i);
                     self.ime = false;
                     self.push16(self.registers.pc);
                     self.registers.pc = 0x40 + (i << 3) as u16;
+                    self.mtick();
                     break;
                 }
             }
@@ -166,8 +176,8 @@ impl Cpu {
         &mut self.memory.joypad
     }
 
-    fn decode_instr(&self) -> Instruction {
-        let byte = self.read_opcode();
+    fn decode_instr(&mut self) -> Instruction {
+        let byte = self.u8_arg();
         let lo_3bit = byte & 0b111;
         let hi_3bit = (byte & 0b111111) >> 3;
         let hi_2bit = hi_3bit >> 1;
@@ -284,24 +294,30 @@ impl Cpu {
                 LdType::AFromMem(addr) => {
                     let val = self.memory.read(addr);
                     self.write8(R8::A, val);
+                    self.mtick();
                 }
                 LdType::MemFromA(addr) => {
                     let val = self.read8(R8::A);
                     self.memory.write(addr, val);
+                    self.mtick();
                 }
                 LdType::StoreSP(addr) => {
                     let [lsb, msb] = self.read16(R16::SP).to_le_bytes();
                     self.memory.write(addr, lsb);
+                    self.mtick();
                     self.memory.write(addr + 1, msb);
+                    self.mtick();
                 }
                 LdType::HLFromSP(offset) => {
                     let (result, h, c) = self.read16(R16::SP).half_overflowing_add_signed(offset);
                     self.registers.write(RegWrite::HL(result));
                     self.set_flags(Some(false), Some(false), Some(h), Some(c));
+                    self.mtick();
                 }
                 LdType::SPFromHL => {
                     let val = self.read16(R16::HL);
                     self.registers.write(RegWrite::SP(val));
+                    self.mtick();
                 }
             },
 
@@ -318,10 +334,12 @@ impl Cpu {
             Instruction::IncR16(r16) => {
                 let val = self.read16(r16).wrapping_add(1);
                 self.write16(r16, val);
+                self.mtick();
             }
             Instruction::DecR16(r16) => {
                 let val = self.read16(r16).wrapping_sub(1);
                 self.write16(r16, val);
+                self.mtick();
             }
 
             Instruction::Add(src) => {
@@ -388,11 +406,14 @@ impl Cpu {
                 let (result, h, c) = val.half_overflowing_add(hl);
                 self.write16(R16::HL, result);
                 self.set_flags(None, Some(false), Some(h), Some(c));
+                self.mtick();
             }
             Instruction::AddSP(offset) => {
                 let (result, h, c) = self.read16(R16::SP).half_overflowing_add_signed(offset);
                 self.registers.write(RegWrite::SP(result));
                 self.set_flags(Some(false), Some(false), Some(h), Some(c));
+                self.mtick();
+                self.mtick();
             }
 
             Instruction::Rlc(r8) => {
@@ -521,49 +542,65 @@ impl Cpu {
                 if self.read_branch_cond(cond) {
                     branch_taken = true;
                     self.registers.pc = self.registers.pc.wrapping_add_signed(offset as i16);
+                    self.mtick();
                 }
             }
             Instruction::JrAlways(offset) => {
                 self.registers.pc = self.registers.pc.wrapping_add_signed(offset as i16);
+                self.mtick();
             }
             Instruction::Jp(cond, addr) => {
                 if self.read_branch_cond(cond) {
                     branch_taken = true;
                     self.registers.pc = addr;
+                    self.mtick();
                 }
             }
-            Instruction::JpAlways(addr) => self.registers.pc = addr,
+            Instruction::JpAlways(addr) => {
+                self.registers.pc = addr;
+                self.mtick();
+            }
             Instruction::Call(cond, addr) => {
                 if self.read_branch_cond(cond) {
                     branch_taken = true;
                     self.push16(self.registers.pc);
                     self.registers.pc = addr;
+                    self.mtick();
                 }
             }
             Instruction::CallAlways(addr) => {
                 self.push16(self.registers.pc);
                 self.registers.pc = addr;
+                self.mtick();
             }
             Instruction::Ret(cond) => {
+                self.mtick();
                 if self.read_branch_cond(cond) {
                     branch_taken = true;
                     self.registers.pc = self.pop16();
+                    self.mtick();
                 }
             }
-            Instruction::RetAlways => self.registers.pc = self.pop16(),
+            Instruction::RetAlways => {
+                self.registers.pc = self.pop16();
+                self.mtick();
+            }
             Instruction::Rst(addr) => {
                 self.push16(self.registers.pc);
                 self.registers.pc = addr as u16;
+                self.mtick();
             }
             Instruction::Reti => {
                 self.registers.pc = self.pop16();
                 self.ime = true;
+                self.mtick();
             }
             Instruction::JpHL => self.registers.pc = self.registers.reg16(Reg16::HL),
 
             Instruction::Push(src) => {
                 let val = self.read_push_pop(src);
                 self.push16(val);
+                self.mtick();
             }
             Instruction::Pop(dest) => {
                 let val = self.pop16();
@@ -642,19 +679,15 @@ impl Cpu {
         }
     }
 
-    fn read_opcode(&self) -> u8 {
-        self.memory.read(self.registers.pc)
+    fn u8_arg(&mut self) -> u8 {
+        let arg = self.memory.read(self.registers.pc);
+        self.mtick();
+        self.registers.pc += 1;
+        arg
     }
 
-    fn u8_arg(&self) -> u8 {
-        self.memory.read(self.registers.pc + 1)
-    }
-
-    fn u16_arg(&self) -> u16 {
-        u16::from_le_bytes([
-            self.memory.read(self.registers.pc + 1),
-            self.memory.read(self.registers.pc + 2),
-        ])
+    fn u16_arg(&mut self) -> u16 {
+        u16::from_le_bytes([self.u8_arg(), self.u8_arg()])
     }
 
     fn read8(&mut self, r8: R8) -> u8 {
@@ -707,7 +740,7 @@ impl Cpu {
     }
 
     fn read_ind(&mut self, ind: MemIndirect) -> u8 {
-        match ind {
+        let val = match ind {
             MemIndirect::BC => self.memory.read(self.registers.reg16(Reg16::BC)),
             MemIndirect::DE => self.memory.read(self.registers.reg16(Reg16::DE)),
             MemIndirect::HL => self.memory.read(self.registers.reg16(Reg16::HL)),
@@ -723,7 +756,9 @@ impl Cpu {
                 self.registers.write(RegWrite::HL(hl.wrapping_sub(1)));
                 val
             }
-        }
+        };
+        self.mtick();
+        val
     }
 
     fn write_ind(&mut self, ind: MemIndirect, val: u8) {
@@ -742,6 +777,7 @@ impl Cpu {
                 self.registers.write(RegWrite::HL(hl.wrapping_sub(1)));
             }
         }
+        self.mtick();
     }
 
     fn read_alu(&mut self, alu: AluSrc) -> u8 {
@@ -751,13 +787,15 @@ impl Cpu {
         }
     }
 
-    fn read_io(&self, io: Io) -> u8 {
-        match io {
+    fn read_io(&mut self, io: Io) -> u8 {
+        let val = match io {
             Io::C => self
                 .memory
                 .read(0xFF00 + self.registers.reg8(Reg8::C) as u16),
             Io::Imm(imm) => self.memory.read(0xFF00 + imm as u16),
-        }
+        };
+        self.mtick();
+        val
     }
 
     fn write_io(&mut self, io: Io, val: u8) {
@@ -767,6 +805,7 @@ impl Cpu {
                 .write(0xFF00 + self.registers.reg8(Reg8::C) as u16, val),
             Io::Imm(imm) => self.memory.write(0xFF00 + imm as u16, val),
         }
+        self.mtick();
     }
 
     fn read_push_pop(&self, push_pop: PushPop) -> u16 {
@@ -799,6 +838,7 @@ impl Cpu {
     fn push8(&mut self, val: u8) {
         let sp = self.registers.reg16(Reg16::SP);
         self.registers.write(RegWrite::SP(sp - 1));
+        self.mtick();
         self.memory.write(sp - 1, val);
     }
 
@@ -812,6 +852,7 @@ impl Cpu {
         let sp = self.registers.reg16(Reg16::SP);
         let val = self.memory.read(sp);
         self.registers.write(RegWrite::SP(sp + 1));
+        self.mtick();
         val
     }
 
