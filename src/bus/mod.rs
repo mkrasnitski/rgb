@@ -15,6 +15,7 @@ pub struct Timers {
 
     result: bool,
     overflow: bool,
+    reload: bool,
 }
 
 impl Default for Timers {
@@ -27,12 +28,12 @@ impl Default for Timers {
 
             result: false,
             overflow: false,
+            reload: false,
         }
     }
 }
 
 impl Timers {
-    // TODO: M-cycle accuracy required for cancelling interrupts via TIMA writes
     pub fn increment(&mut self, apu: &mut Apu) -> bool {
         let old_div = self.div;
         self.div = self.div.wrapping_add(4);
@@ -49,6 +50,7 @@ impl Timers {
         };
         let new_result = self.div.bit(bit) && self.tac.bit(2);
 
+        self.reload = false;
         let interrupt = self.overflow;
         if self.result && !new_result {
             let (tima, c) = self.tima.overflowing_add(1);
@@ -64,6 +66,7 @@ impl Timers {
         if interrupt {
             self.tima = self.tma;
             self.overflow = false;
+            self.reload = true;
         }
         interrupt
     }
@@ -181,10 +184,19 @@ impl MemoryBus {
             0xff00 => self.joypad.write(val),
             0xff04 => self.timers.div = 0,
             0xff05 => {
-                self.timers.tima = val;
-                self.timers.overflow = false;
+                // TIMA writes are ignored on this M-cycle
+                if !self.timers.reload {
+                    self.timers.tima = val;
+                    self.timers.overflow = false;
+                }
             }
-            0xff06 => self.timers.tma = val,
+            0xff06 => {
+                self.timers.tma = val;
+                // Hack for TMA write to flow into TIMA when writing on this M-cycle
+                if self.timers.reload {
+                    self.timers.tima = val;
+                }
+            }
             0xff07 => self.timers.tac = val | 0xf8,
 
             0xff0f => self.int_flag = val | 0xE0,
