@@ -21,9 +21,6 @@ pub struct Args {
 
     #[arg(short, long, help = "Enable debug logs")]
     pub logfile: Option<PathBuf>,
-
-    #[arg(short, long, help = "Scale factor", default_value = "3")]
-    pub scale: u32,
 }
 
 #[derive(Deserialize)]
@@ -32,6 +29,7 @@ pub struct Config {
     pub saves_dir: PathBuf,
     #[serde(rename = "volume")]
     pub audio_volume: f32,
+    pub scale: u32,
     #[serde(rename = "hotkeys")]
     keybindings: Keybindings,
 }
@@ -51,6 +49,7 @@ impl Config {
                     bootrom: "dmg_boot.bin".to_string(),
                     saves_dir: "saves".into(),
                     audio_volume: 100.0,
+                    scale: 3,
                     keybindings: Keybindings::default(),
                 }
             }

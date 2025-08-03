@@ -21,7 +21,7 @@ pub struct Gameboy {
 
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
-        let display = Display::new(config.keymap(), args.scale);
+        let display = Display::new(config.keymap(), config.scale);
         let bootrom = if args.skip_bootrom {
             None
         } else {
