@@ -88,11 +88,11 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(bootrom: Option<[u8; 0x100]>, cartridge: Cartridge, audio_volume: f32) -> Self {
+    pub fn new(bootrom: Option<[u8; 0x100]>, cartridge: Cartridge, apu: Apu) -> Self {
         Self {
             bootrom,
             cartridge,
-            apu: Apu::new(audio_volume),
+            apu,
             ppu: Ppu::new(),
             dma: Dma::default(),
             wram: vec![0; 0x2000].try_into().unwrap(),

@@ -5,6 +5,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
 use winit::window::WindowId;
 
+use crate::apu::Apu;
 use crate::bus::Cartridge;
 use crate::config::{Args, Config};
 use crate::cpu::Cpu;
@@ -43,7 +44,8 @@ impl Gameboy {
                 }
             })
             .transpose()?;
-        let cpu = Cpu::new(bootrom, cartridge, config.audio_volume, logfile);
+        let apu = Apu::new(config.audio_volume, args.disable_audio);
+        let cpu = Cpu::new(bootrom, cartridge, apu, logfile);
         Ok(Self { cpu, display })
     }
 }

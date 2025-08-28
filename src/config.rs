@@ -21,6 +21,9 @@ pub struct Args {
 
     #[arg(short, long, help = "Enable debug logs")]
     pub logfile: Option<PathBuf>,
+
+    #[arg(long, default_value = "false")]
+    pub disable_audio: bool,
 }
 
 #[derive(Deserialize)]

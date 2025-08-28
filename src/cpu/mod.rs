@@ -6,6 +6,7 @@ use std::io::{BufWriter, Write};
 mod instruction;
 mod registers;
 
+use crate::apu::Apu;
 use crate::bus::joypad::Joypad;
 use crate::bus::{Cartridge, MemoryBus};
 use crate::ppu::Ppu;
@@ -41,11 +42,11 @@ impl Cpu {
     pub fn new(
         bootrom: Option<[u8; 0x100]>,
         cartridge: Cartridge,
-        audio_volume: f32,
+        apu: Apu,
         logfile: Option<Box<dyn Write>>,
     ) -> Self {
         let mut cpu = Self {
-            memory: MemoryBus::new(bootrom, cartridge, audio_volume),
+            memory: MemoryBus::new(bootrom, cartridge, apu),
             registers: Registers::default(),
             cycles: 0,
             ime: false,

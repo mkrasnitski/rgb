@@ -66,9 +66,11 @@ impl Panning {
 }
 
 impl Apu {
-    pub fn new(volume: f32) -> Self {
+    pub fn new(volume: f32, disable_audio: bool) -> Self {
         let (sample_tx, sample_rx) = channel();
-        std::thread::spawn(move || spawn_audio(sample_rx, volume));
+        if !disable_audio {
+            std::thread::spawn(move || spawn_audio(sample_rx, volume));
+        }
         Self {
             sampler: Sampler::new(sample_tx),
             channel1: Default::default(),
