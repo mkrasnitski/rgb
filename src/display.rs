@@ -23,8 +23,8 @@ pub enum DisplayEvent {
     Quit,
 }
 
-pub struct Display<const W: u32, const H: u32> {
-    surface: Option<Surface<W, H>>,
+pub struct Display {
+    surface: Option<Surface<160, 144>>,
     keymap: KeyMap,
     scale_factor: u32,
     limit_framerate: bool,
@@ -32,7 +32,7 @@ pub struct Display<const W: u32, const H: u32> {
     instant: Instant,
 }
 
-impl<const W: u32, const H: u32> Display<W, H> {
+impl Display {
     pub fn new(keymap: KeyMap, scale_factor: u32) -> Self {
         Self {
             surface: None,

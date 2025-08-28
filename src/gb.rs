@@ -12,12 +12,9 @@ use crate::cpu::Cpu;
 use crate::display::{Display, DisplayEvent};
 use crate::hotkeys::Hotkey;
 
-const WIDTH: u32 = 160;
-const HEIGHT: u32 = 144;
-
 pub struct Gameboy {
     cpu: Cpu,
-    display: Display<WIDTH, HEIGHT>,
+    display: Display,
 }
 
 impl Gameboy {
