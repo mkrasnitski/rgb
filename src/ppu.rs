@@ -61,8 +61,20 @@ impl Sprite {
 
 #[derive(Copy, Clone, Default)]
 struct Pixel {
-    color: u8,
+    color_idx: u8,
     palette: u8,
+}
+
+impl Pixel {
+    fn color(&self) -> [u8; 4] {
+        match (self.palette >> (2 * self.color_idx)) & 0b11 {
+            0 => WHITE,
+            1 => LIGHT_GRAY,
+            2 => DARK_GRAY,
+            3 => BLACK,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -294,14 +306,7 @@ impl Ppu {
     pub fn render(&mut self, pixels: &mut Pixels) -> Result<()> {
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
             let color = if self.LCDC.bit(7) && !self.first_lcd_frame {
-                let pixel = self.viewport[idx / 160][idx % 160];
-                match (pixel.palette >> (2 * pixel.color)) & 0b11 {
-                    0 => WHITE,
-                    1 => LIGHT_GRAY,
-                    2 => DARK_GRAY,
-                    3 => BLACK,
-                    _ => unreachable!(),
-                }
+                self.viewport[idx / 160][idx % 160].color()
             } else {
                 WHITE
             };
@@ -329,11 +334,11 @@ impl Ppu {
         let y = self.SCY.wrapping_add(self.LY);
         for tile in 0..32 {
             let tile_row = self.get_tile_row(tilemap, y, tile);
-            for (i, &color) in tile_row.iter().enumerate() {
+            for (i, &color_idx) in tile_row.iter().enumerate() {
                 let x = (8 * tile + i as u8).wrapping_sub(self.SCX) as usize;
                 if x < 160 {
                     self.viewport[self.LY as usize][x] = Pixel {
-                        color,
+                        color_idx,
                         palette: self.BGP,
                     };
                 }
@@ -346,12 +351,12 @@ impl Ppu {
         let mut window_visible = false;
         for tile in 0..32 {
             let tile_row = self.get_tile_row(tilemap, self.WC, tile);
-            for (i, &color) in tile_row.iter().enumerate() {
+            for (i, &color_idx) in tile_row.iter().enumerate() {
                 let x = 8 * tile as usize + i + self.WX as usize - 7;
                 if x < 160 {
                     window_visible = true;
                     self.viewport[self.LY as usize][x] = Pixel {
-                        color,
+                        color_idx,
                         palette: self.BGP,
                     };
                 }
@@ -376,10 +381,13 @@ impl Ppu {
             let scanline = &mut self.viewport[self.LY as usize];
             for i in 0..8 {
                 let col = if sprite.x_flip { 7 - i } else { i };
-                let color = tile_row[col];
+                let color_idx = tile_row[col];
                 let x = (sprite.x + i as u8).wrapping_sub(8);
-                if x < 160 && color != 0 && (!sprite.priority || scanline[x as usize].color == 0) {
-                    scanline[x as usize] = Pixel { color, palette };
+                if x < 160
+                    && color_idx != 0
+                    && (!sprite.priority || scanline[x as usize].color_idx == 0)
+                {
+                    scanline[x as usize] = Pixel { color_idx, palette };
                 }
             }
         }
