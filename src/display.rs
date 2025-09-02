@@ -49,6 +49,11 @@ impl Display {
         Ok(())
     }
 
+    pub fn quit(&mut self, event_loop: &ActiveEventLoop) {
+        self.surface.take();
+        event_loop.exit();
+    }
+
     pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
         if let Some(surface) = &mut self.surface {
             if self.limit_framerate {

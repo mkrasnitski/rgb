@@ -51,7 +51,7 @@ impl ApplicationHandler for Gameboy {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Err(e) = self.display.reinit_surface(event_loop) {
             println!("{e:?}");
-            event_loop.exit();
+            self.display.quit(event_loop);
         }
     }
 
@@ -61,7 +61,7 @@ impl ApplicationHandler for Gameboy {
                 DisplayEvent::RedrawRequested => {
                     if let Err(e) = self.display.draw_frame(&mut self.cpu) {
                         println!("{e:?}");
-                        event_loop.exit();
+                        self.display.quit(event_loop);
                     }
                 }
                 DisplayEvent::Hotkey((hotkey, pressed)) => match hotkey {
@@ -79,7 +79,7 @@ impl ApplicationHandler for Gameboy {
                     if let Err(e) = self.cpu.save_external_ram() {
                         println!("Failed to save: {e:?}");
                     }
-                    event_loop.exit()
+                    self.display.quit(event_loop);
                 }
             }
         }
