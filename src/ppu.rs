@@ -319,9 +319,16 @@ impl Ppu {
 
     fn draw_line(&mut self) {
         if self.LCDC.bit(0) {
-            self.draw_bg_line();
+            // Background
+            self.draw_tile_line(
+                self.LCDC.bit(3),
+                self.SCY.wrapping_add(self.LY),
+                self.SCX,
+                false,
+            );
             if self.LCDC.bit(5) && self.LY >= self.WY {
-                self.draw_win_line();
+                // Window
+                self.draw_tile_line(self.LCDC.bit(6), self.WC, self.WX.wrapping_sub(7), true);
             }
         }
         if self.LCDC.bit(1) {
@@ -329,65 +336,59 @@ impl Ppu {
         }
     }
 
-    fn draw_bg_line(&mut self) {
-        let tilemap = self.LCDC.bit(3);
-        let y = self.SCY.wrapping_add(self.LY);
-        for tile in 0..32 {
-            let tile_row = self.get_tile_row(tilemap, y, tile);
-            for (i, &color_idx) in tile_row.iter().enumerate() {
-                let x = (8 * tile + i as u8).wrapping_sub(self.SCX) as usize;
-                if x < 160 {
-                    self.viewport[self.LY as usize][x] = Pixel {
-                        color_idx,
-                        palette: self.BGP,
-                    };
-                }
-            }
-        }
-    }
+    fn draw_tile_line(&mut self, tilemap_bit: bool, y: u8, x_offset: u8, window: bool) {
+        let mut visible = false;
+        for i in 0..32 {
+            let tile_row = self.get_tile_row(tilemap_bit, y, i);
+            for (j, &color_idx) in tile_row.iter().enumerate() {
+                let col = 8 * i + j as u8;
+                let x = if window {
+                    col.saturating_add(x_offset)
+                } else {
+                    col.wrapping_sub(x_offset)
+                };
 
-    fn draw_win_line(&mut self) {
-        let tilemap = self.LCDC.bit(6);
-        let mut window_visible = false;
-        for tile in 0..32 {
-            let tile_row = self.get_tile_row(tilemap, self.WC, tile);
-            for (i, &color_idx) in tile_row.iter().enumerate() {
-                let x = 8 * tile as usize + i + self.WX as usize - 7;
                 if x < 160 {
-                    window_visible = true;
-                    self.viewport[self.LY as usize][x] = Pixel {
+                    visible = true;
+                    self.viewport[self.LY as usize][x as usize] = Pixel {
                         color_idx,
                         palette: self.BGP,
-                    };
+                    }
                 }
             }
         }
-        if window_visible {
+        if window && visible {
             self.WC += 1;
         }
     }
 
     fn draw_sprite_line(&mut self) {
-        let height = if self.LCDC.bit(2) { 16 } else { 8 };
+        let obj_size = self.LCDC.bit(2);
         for sprite in &self.oam_sprites {
             let mut row = self.LY + 16 - sprite.y;
             if sprite.y_flip {
-                row = height - row - 1;
+                row = if obj_size { 15 - row } else { 7 - row };
             }
-            let palette = if sprite.palette { self.OBP1 } else { self.OBP0 };
-            let tile = sprite.tile & (0xFF - height / 8 + 1);
-            let tile_row = self.decode_tile_row(tile, row, true);
 
+            let tile = if obj_size {
+                sprite.tile & 0xFE
+            } else {
+                sprite.tile
+            };
+
+            let tile_row = self.decode_tile_row(tile, row, true);
             let scanline = &mut self.viewport[self.LY as usize];
-            for i in 0..8 {
+            for (i, &color_idx) in tile_row.iter().enumerate() {
                 let col = if sprite.x_flip { 7 - i } else { i };
-                let color_idx = tile_row[col];
-                let x = (sprite.x + i as u8).wrapping_sub(8);
+                let x = (sprite.x + col as u8).wrapping_sub(8);
                 if x < 160
                     && color_idx != 0
                     && (!sprite.priority || scanline[x as usize].color_idx == 0)
                 {
-                    scanline[x as usize] = Pixel { color_idx, palette };
+                    scanline[x as usize] = Pixel {
+                        color_idx,
+                        palette: if sprite.palette { self.OBP1 } else { self.OBP0 },
+                    };
                 }
             }
         }
