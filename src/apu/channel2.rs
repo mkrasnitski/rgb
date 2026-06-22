@@ -72,6 +72,10 @@ impl Channel2 {
         }
     }
 
+    pub fn power_off(&mut self) {
+        *self = Default::default()
+    }
+
     pub fn enabled(&self) -> bool {
         self.trigger
     }

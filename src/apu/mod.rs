@@ -29,7 +29,6 @@ pub struct Apu {
     channel3: channel3::Channel3,
     channel4: channel4::Channel4,
     panning: Panning,
-    aram: [u8; 0x10],
     vin_left: bool,
     left_volume: u8,
     vin_right: bool,
@@ -80,7 +79,6 @@ impl Apu {
             channel3: Default::default(),
             channel4: Default::default(),
             panning: Default::default(),
-            aram: [0; 0x10],
             vin_left: false,
             left_volume: 0,
             vin_right: false,
@@ -93,7 +91,7 @@ impl Apu {
         match addr {
             0xff10..=0xff14 => self.channel1.read(addr),
             0xff16..=0xff19 => self.channel2.read(addr),
-            0xff1a..=0xff1e => self.channel3.read(addr),
+            0xff1a..=0xff1e | 0xff30..=0xff3f => self.channel3.read(addr),
             0xff20..=0xff23 => self.channel4.read(addr),
 
             0xff24 => {
@@ -112,7 +110,6 @@ impl Apu {
                     | self.channel1.enabled() as u8
             }
 
-            0xff30..=0xff3f => self.aram[addr as usize - 0xff30],
             _ => unreachable!(),
         }
     }
@@ -125,7 +122,7 @@ impl Apu {
         match addr {
             0xff10..=0xff14 => self.channel1.write(addr, val),
             0xff16..=0xff19 => self.channel2.write(addr, val),
-            0xff1a..=0xff1e => self.channel3.write(addr, val),
+            0xff1a..=0xff1e | 0xff30..=0xff3f => self.channel3.write(addr, val),
             0xff20..=0xff23 => self.channel4.write(addr, val),
 
             0xff24 => {
@@ -140,10 +137,10 @@ impl Apu {
                 self.master_enable = bit;
                 if !bit {
                     // Powering off APU resets all registers to 0
-                    self.channel1 = Default::default();
-                    self.channel2 = Default::default();
-                    self.channel3 = Default::default();
-                    self.channel4 = Default::default();
+                    self.channel1.power_off();
+                    self.channel2.power_off();
+                    self.channel3.power_off();
+                    self.channel4.power_off();
                     self.panning = Panning::default();
                     self.vin_left = false;
                     self.left_volume = 0;
@@ -151,8 +148,6 @@ impl Apu {
                     self.right_volume = 0;
                 }
             }
-
-            0xff30..=0xff3f => self.aram[addr as usize - 0xff30] = val,
             _ => unreachable!(),
         }
     }
@@ -174,8 +169,8 @@ impl Apu {
 
     fn sample(&self) -> (f32, f32) {
         macro_rules! pan {
-            ($chan:ident $(,$arg:expr)?) => {{
-                let sample = self.$chan.sample($($arg)?);
+            ($chan:ident) => {{
+                let sample = self.$chan.sample();
                 let (pan_left, pan_right) = self.panning.$chan;
                 (
                     if pan_left { sample } else { 0.0 },
@@ -186,7 +181,7 @@ impl Apu {
 
         let (ch1_left, ch1_right) = pan!(channel1);
         let (ch2_left, ch2_right) = pan!(channel2);
-        let (ch3_left, ch3_right) = pan!(channel3, &self.aram);
+        let (ch3_left, ch3_right) = pan!(channel3);
         let (ch4_left, ch4_right) = pan!(channel4);
 
         let left = (ch1_left + ch2_left + ch3_left + ch4_left) / 4.0;

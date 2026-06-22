@@ -1,16 +1,35 @@
 use super::utils::LengthCounter;
 use crate::utils::BitExtract;
 
-#[derive(Default)]
 pub struct Channel3 {
     dac_enabled: bool,
     volume: u8,
     period: u16,
     trigger: bool,
 
+    aram: [u8; 0x10],
     sample_index: u8,
     period_counter: u16,
     length: LengthCounter<256>,
+}
+
+impl Default for Channel3 {
+    fn default() -> Self {
+        Self {
+            dac_enabled: false,
+            volume: 0,
+            period: 0,
+            trigger: false,
+
+            aram: [
+                0xAE, 0x9D, 0x41, 0xFA, 0x50, 0x77, 0x22, 0xCE, 0x00, 0xB9, 0x1F, 0xDB, 0x1A, 0xB3,
+                0x40, 0xFA,
+            ],
+            sample_index: 0,
+            period_counter: 0,
+            length: Default::default(),
+        }
+    }
 }
 
 impl Channel3 {
@@ -21,6 +40,7 @@ impl Channel3 {
             0xff1c => (self.volume << 5) | 0x9f,
             0xff1d => 0xff,
             0xff1e => ((self.length.is_enabled() as u8) << 6) | 0xbf,
+            0xff30..=0xff3f => self.aram[addr as usize - 0xff30],
 
             _ => unreachable!(),
         }
@@ -55,9 +75,16 @@ impl Channel3 {
                     self.length.trigger();
                 }
             }
+            0xff30..=0xff3f => self.aram[addr as usize - 0xff30] = val,
 
             _ => unreachable!(),
         }
+    }
+
+    pub fn power_off(&mut self) {
+        let aram = self.aram;
+        *self = Default::default();
+        self.aram = aram;
     }
 
     pub fn enabled(&self) -> bool {
@@ -80,8 +107,8 @@ impl Channel3 {
         }
     }
 
-    pub fn sample(&self, aram: &[u8; 16]) -> f32 {
-        let samples = aram.map(|byte| [byte >> 4, byte & 0xf]);
+    pub fn sample(&self) -> f32 {
+        let samples = self.aram.map(|byte| [byte >> 4, byte & 0xf]);
         if self.dac_enabled {
             let sample = samples[self.sample_index as usize / 2][self.sample_index as usize % 2];
             let shift = match self.volume {

@@ -68,6 +68,10 @@ impl Channel4 {
         }
     }
 
+    pub fn power_off(&mut self) {
+        *self = Default::default()
+    }
+
     pub fn enabled(&self) -> bool {
         self.trigger
     }
