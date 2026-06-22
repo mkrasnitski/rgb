@@ -13,6 +13,8 @@ mod channel3;
 mod channel4;
 mod utils;
 
+const SAMPLERATE: u32 = 48000;
+
 const DUTY_CYCLES: [u8; 4] = [
     0b00000001, // 12.5%
     0b00000011, // 25%
@@ -211,12 +213,12 @@ fn spawn_audio(sample_rx: Receiver<(f32, f32)>, volume: f32) -> Result<()> {
         .ok_or_else(|| anyhow::Error::msg("Default output device is not available"))?;
     let config = StreamConfig {
         channels: 2,
-        sample_rate: cpal::SampleRate(48000),
+        sample_rate: SAMPLERATE,
         buffer_size: cpal::BufferSize::Default,
     };
 
     let stream = device.build_output_stream(
-        &config,
+        config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_mut(2) {
                 if let Ok((left, right)) = sample_rx.recv() {
