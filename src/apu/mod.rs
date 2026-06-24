@@ -216,10 +216,9 @@ fn spawn_audio(sample_rx: Receiver<(f32, f32)>, volume: f32) -> Result<()> {
         config,
         move |data: &mut [f32], _| {
             for frame in data.chunks_mut(2) {
-                if let Ok((left, right)) = sample_rx.recv() {
-                    frame[0] = left * volume / 100.0;
-                    frame[1] = right * volume / 100.0;
-                }
+                let (left, right) = sample_rx.try_recv().unwrap_or_default();
+                frame[0] = left * volume / 100.0;
+                frame[1] = right * volume / 100.0;
             }
         },
         |err| eprintln!("{err}"),
@@ -257,25 +256,8 @@ impl Sampler {
                 || self.instant.elapsed() >= Duration::from_secs_f64(1.0 / 128.0))
         {
             // 8192 samples @ 1048576Hz = 375 samples @ 48000Hz
-            //
-            // Interpolate 22 or 21 samples at a time.
-            //   8192 = 317*22 + 58*21
-            //   317 + 58 = 375
-            let (h1, h2) = self.sample_buffer.split_at(317 * 22);
-            let samples: [(f32, f32); 375] = h1
-                .chunks_exact(22)
-                .chain(h2.chunks_exact(21))
-                .map(|slice| {
-                    let sum = slice
-                        .iter()
-                        .fold((0.0, 0.0), |acc, s| (acc.0 + s.0, acc.1 + s.1));
-                    let len = slice.len() as f32;
-                    (sum.0 / len, sum.1 / len)
-                })
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap();
-            for sample in samples {
+            for i in 0..375 {
+                let sample = self.sample_buffer[i * 8192 / 375];
                 let _ = self.sample_tx.send(sample);
             }
             self.sample_buffer.clear();
