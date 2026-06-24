@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::cpu::Cpu;
 use crate::hotkeys::{Hotkey, KeyMap};
@@ -29,7 +29,6 @@ pub struct Display {
     scale_factor: u32,
     limit_framerate: bool,
     frame_limiter: Interval,
-    instant: Instant,
 }
 
 impl Display {
@@ -40,7 +39,6 @@ impl Display {
             scale_factor,
             limit_framerate: true,
             frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
-            instant: Instant::now(),
         }
     }
 
@@ -56,16 +54,11 @@ impl Display {
 
     pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
         if let Some(surface) = &mut self.surface {
+            cpu.run_frame()?;
             if self.limit_framerate {
-                cpu.run_frame()?;
                 self.frame_limiter.tick();
-            } else {
-                while self.instant.elapsed() < Duration::from_secs_f64(1.0 / 480.0) {
-                    cpu.run_frame()?;
-                }
             }
             cpu.ppu_mut().render(&mut surface.pixels)?;
-            self.instant = Instant::now();
         }
         Ok(())
     }
