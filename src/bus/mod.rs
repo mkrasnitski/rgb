@@ -138,6 +138,9 @@ impl MemoryBus {
             0xff06 => self.timers.tma,
             0xff07 => self.timers.tac | 0xf8,
 
+            0xff0f => self.int_flag | 0xe0,
+            0xffff => self.int_enable,
+
             0xff10..=0xff14 | 0xff16..=0xff1e | 0xff20..=0xff26 | 0xff30..=0xff3f => {
                 self.apu.read(addr)
             }
@@ -146,9 +149,6 @@ impl MemoryBus {
 
             0xff46 => self.dma.base,
             0xff50 => 0xff,
-
-            0xff0f => self.int_flag | 0xe0,
-            0xffff => self.int_enable,
 
             // stubs
             0xff01 => 0x00,

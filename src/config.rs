@@ -52,7 +52,7 @@ impl Config {
                     bootrom: "dmg_boot.bin".to_string(),
                     saves_dir: "saves".into(),
                     audio_volume: 100.0,
-                    scale: 3,
+                    scale: 5,
                     keybindings: Keybindings::default(),
                 }
             }

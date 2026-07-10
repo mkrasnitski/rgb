@@ -105,14 +105,10 @@ impl Cpu {
         } else {
             let cycles = self.cycles;
             let pc = self.registers.pc;
-            let state = self
-                .logfile
-                .is_some()
-                .then(|| format!("{self:?}"))
-                .unwrap_or_default();
+            let state = self.logfile.as_ref().map(|_| format!("{self:?}"));
             let instr = self.decode_instr();
             if let Some(logfile) = self.logfile.as_mut() {
-                writeln!(logfile, "{state} {instr:?}")?;
+                writeln!(logfile, "{} {instr:?}", state.unwrap_or_default())?;
             }
             assert_eq!(instr.length() as u16, self.registers.pc - pc);
             let instr_cycles = self.execute_instr(instr);

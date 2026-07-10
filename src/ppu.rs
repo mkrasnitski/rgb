@@ -175,7 +175,7 @@ impl Ppu {
             0xff49 => self.OBP1 = val,
             0xff4a => self.WY = val,
             0xff4b => self.WX = val,
-            _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#02x}"),
+            _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#04x}"),
         }
     }
 
