@@ -78,7 +78,8 @@ pub struct MemoryBus {
     ppu: Ppu,
     dma: Dma,
     pub apu: Apu,
-    wram: Box<[u8; 0x2000]>,
+    wram: Box<[u8; 0x8000]>,
+    wram_bank: u8,
     hram: Box<[u8; 0x7f]>,
     pub timers: Timers,
     pub joypad: Joypad,
@@ -96,7 +97,8 @@ impl MemoryBus {
             apu,
             ppu: Ppu::new(),
             dma: Dma::default(),
-            wram: vec![0; 0x2000].try_into().unwrap(),
+            wram: vec![0; 0x8000].try_into().unwrap(),
+            wram_bank: 0,
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
@@ -120,7 +122,15 @@ impl MemoryBus {
             0x0000..=0x7fff => self.cartridge.read(addr),
             0x8000..=0x9fff => self.ppu.read(addr),
             0xa000..=0xbfff => self.cartridge.read(addr),
-            0xc000..=0xdfff => self.wram[addr as usize - 0xc000],
+            0xc000..=0xcfff => self.wram[addr as usize - 0xc000],
+            0xd000..=0xdfff => {
+                let bank = if self.wram_bank == 0 {
+                    1
+                } else {
+                    self.wram_bank as usize
+                };
+                self.wram[bank * 0x1000 + addr as usize - 0xd000]
+            }
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000],
             0xfe00..=0xfe9f => {
                 if self.dma.slot.is_some() {
@@ -153,18 +163,21 @@ impl MemoryBus {
             0xff46 => self.dma.base,
             0xff50 => 0xff,
 
+            0xff70 => self.wram_bank | 0xf8,
+
             // stubs
             0xff01 => 0x00,
             0xff02 => 0x7e,
 
-            // unused on DMG
+            // unused
             0xff03
             | 0xff08..=0xff0e
             | 0xff15
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4c..=0xff4f
-            | 0xff51..=0xff7f => 0xff,
+            | 0xff51..=0xff6f
+            | 0xff71..=0xff7f => 0xff,
         }
     }
 
@@ -173,7 +186,15 @@ impl MemoryBus {
             0x0000..=0x7fff => self.cartridge.write(addr, val),
             0x8000..=0x9fff => self.ppu.write(addr, val),
             0xa000..=0xbfff => self.cartridge.write(addr, val),
-            0xc000..=0xdfff => self.wram[addr as usize - 0xc000] = val,
+            0xc000..=0xcfff => self.wram[addr as usize - 0xc000] = val,
+            0xd000..=0xdfff => {
+                let bank = if self.wram_bank == 0 {
+                    1
+                } else {
+                    self.wram_bank as usize
+                };
+                self.wram[bank * 0x1000 + addr as usize - 0xd000] = val;
+            }
             0xe000..=0xfdff => self.wram[addr as usize - 0xe000] = val,
             0xfe00..=0xfe9f => {
                 if self.dma.slot.is_none() {
@@ -221,17 +242,20 @@ impl MemoryBus {
                 }
             }
 
+            0xff70 => self.wram_bank = val & 0b111,
+
             // stubs
             0xff01 | 0xff02 => {}
 
-            // unused on DMG
+            // unused
             0xff03
             | 0xff08..=0xff0e
             | 0xff15
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4c..=0xff4f
-            | 0xff51..=0xff7f => {}
+            | 0xff51..=0xff6f
+            | 0xff71..=0xff7f => {}
         }
     }
 
