@@ -40,24 +40,36 @@ pub struct Ppu {
 }
 
 struct Sprite {
-    tile: u8,
+    tile: Tile,
     x: u8,
     y: u8,
+    palette: bool,
+}
+
+struct Tile {
+    tile_num: u8,
     priority: bool,
     x_flip: bool,
     y_flip: bool,
-    palette: bool,
+}
+
+impl Tile {
+    fn new(tile_num: u8, attributes: u8) -> Self {
+        Self {
+            tile_num,
+            priority: attributes.bit(7),
+            x_flip: attributes.bit(5),
+            y_flip: attributes.bit(6),
+        }
+    }
 }
 
 impl Sprite {
     fn from_oam_data(data: [u8; 4]) -> Self {
         Self {
-            tile: data[2],
+            tile: Tile::new(data[2], data[3]),
             x: data[1],
             y: data[0],
-            priority: data[3].bit(7),
-            x_flip: data[3].bit(5),
-            y_flip: data[3].bit(6),
             palette: data[3].bit(4),
         }
     }
@@ -361,8 +373,13 @@ impl Ppu {
     fn draw_tile_line(&mut self, tilemap_bit: bool, y: u8, x_offset: u8, window: bool) {
         let mut visible = false;
         for i in 0..32 {
-            let tile_row = self.get_tile_row(tilemap_bit, y, i);
-            for (j, &color_idx) in tile_row.iter().enumerate() {
+            let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
+            let tile_num = self.read_vram(tilemap + 32 * (y as u16 / 8) + i as u16);
+            for (j, &color_idx) in self
+                .decode_tile_row(tile_num, y % 8, false)
+                .iter()
+                .enumerate()
+            {
                 let col = 8 * i + j as u8;
                 let x = if window {
                     col.saturating_add(x_offset)
@@ -388,24 +405,24 @@ impl Ppu {
         let obj_size = self.LCDC.bit(2);
         for sprite in &self.oam_sprites {
             let mut row = self.LY + 16 - sprite.y;
-            if sprite.y_flip {
+            if sprite.tile.y_flip {
                 row = if obj_size { 15 - row } else { 7 - row };
             }
 
             let tile = if obj_size {
-                sprite.tile & 0xFE
+                sprite.tile.tile_num & 0xFE
             } else {
-                sprite.tile
+                sprite.tile.tile_num
             };
 
             let tile_row = self.decode_tile_row(tile, row, true);
             let scanline = &mut self.viewport[self.LY as usize];
             for (i, &color_idx) in tile_row.iter().enumerate() {
-                let col = if sprite.x_flip { 7 - i } else { i };
+                let col = if sprite.tile.x_flip { 7 - i } else { i };
                 let x = (sprite.x + col as u8).wrapping_sub(8);
                 if x < 160
                     && color_idx != 0
-                    && (!sprite.priority || scanline[x as usize].color_idx == 0)
+                    && (!sprite.tile.priority || scanline[x as usize].color_idx == 0)
                 {
                     scanline[x as usize] = Pixel {
                         color_idx,
@@ -425,12 +442,6 @@ impl Ppu {
         } else {
             None
         }
-    }
-
-    fn get_tile_row(&self, tilemap_bit: bool, line: u8, tile: u8) -> [u8; 8] {
-        let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
-        let tile_num = self.read_vram(tilemap + 32 * (line as u16 / 8) + tile as u16);
-        self.decode_tile_row(tile_num, line % 8, false)
     }
 
     fn decode_tile_row(&self, tile_num: u8, row_num: u8, is_sprite: bool) -> [u8; 8] {
