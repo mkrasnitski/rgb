@@ -43,11 +43,12 @@ enum Interrupt {
 
 impl Cpu {
     pub fn new(
-        bootrom: Option<[u8; 0x100]>,
+        bootrom: Option<Vec<u8>>,
         cartridge: Cartridge,
         apu: Apu,
         logfile: Option<Box<dyn Write>>,
     ) -> Self {
+        let skip_bootrom = bootrom.is_none();
         let mut cpu = Self {
             memory: MemoryBus::new(bootrom, cartridge, apu),
             registers: Registers::default(),
@@ -57,7 +58,7 @@ impl Cpu {
             logfile: logfile.map(BufWriter::new),
         };
 
-        if bootrom.is_none() {
+        if skip_bootrom {
             cpu.registers.write(RegWrite::AF(0x01b0));
             cpu.registers.write(RegWrite::BC(0x0013));
             cpu.registers.write(RegWrite::DE(0x00d8));

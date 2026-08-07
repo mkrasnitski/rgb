@@ -25,6 +25,9 @@ pub struct Args {
     #[arg(short, long, help = "Enable logs")]
     pub logfile: Option<PathBuf>,
 
+    #[arg(long, help = "Disable CGB mode")]
+    pub dmg_compat: bool,
+
     #[arg(long)]
     pub uncap_framerate: bool,
 
@@ -37,7 +40,7 @@ pub struct Args {
 
 #[derive(Deserialize)]
 pub struct Config {
-    pub bootrom: String,
+    pub bootrom: Option<String>,
     pub saves_dir: PathBuf,
     #[serde(rename = "volume")]
     pub audio_volume: f32,
@@ -58,7 +61,7 @@ impl Config {
                 println!("{}: {e}", path.display());
                 println!("Using default config.");
                 Config {
-                    bootrom: "dmg_boot.bin".to_string(),
+                    bootrom: None,
                     saves_dir: "saves".into(),
                     audio_volume: 100.0,
                     scale: 5,

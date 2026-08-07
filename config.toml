@@ -1,4 +1,3 @@
-bootrom = "dmg_boot.bin"
 saves_dir = "saves"
 volume = 100.0
 scale = 5

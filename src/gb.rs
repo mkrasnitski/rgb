@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::fs::File;
+use std::fs::{self, File};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
@@ -24,11 +24,12 @@ impl Gameboy {
         let bootrom = if args.skip_bootrom {
             None
         } else {
-            Some(
-                std::fs::read(&config.bootrom)?
-                    .try_into()
-                    .expect("Bootrom not 0x100 in length"),
-            )
+            let default_path = if args.dmg_compat {
+                "dmg_boot.bin"
+            } else {
+                "cgb_boot.bin"
+            };
+            Some(fs::read(config.bootrom.as_deref().unwrap_or(default_path))?)
         };
         let mut cartridge = Cartridge::new(&args.cartridge, &config.saves_dir)?;
         cartridge.load_external_ram()?;

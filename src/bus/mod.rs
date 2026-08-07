@@ -73,7 +73,7 @@ impl Timers {
 }
 
 pub struct MemoryBus {
-    bootrom: Option<[u8; 0x100]>,
+    bootrom: Option<Vec<u8>>,
     pub cartridge: Cartridge,
     ppu: Ppu,
     dma: Dma,
@@ -88,8 +88,9 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(bootrom: Option<[u8; 0x100]>, cartridge: Cartridge, apu: Apu) -> Self {
+    pub fn new(bootrom: Option<Vec<u8>>, cartridge: Cartridge, apu: Apu) -> Self {
         Self {
+            bootrom_enabled: bootrom.is_some(),
             bootrom,
             cartridge,
             apu,
@@ -99,21 +100,23 @@ impl MemoryBus {
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
-            bootrom_enabled: bootrom.is_some(),
             int_flag: 0xE0,
             int_enable: 0,
         }
     }
 
     pub fn read(&self, addr: u16) -> u8 {
+        // Bootrom is mapped on top of the cartridge, except for 0x100-0x1ff to allow reading the
+        // cartridge header.
+        if let Some(bootrom) = &self.bootrom
+            && self.bootrom_enabled
+            && !(0x100..=0x1ff).contains(&addr)
+            && (addr as usize) < bootrom.len()
+        {
+            return bootrom[addr as usize];
+        }
+
         match addr {
-            0x0000..=0x00ff if self.bootrom_enabled => {
-                if let Some(bootrom) = self.bootrom {
-                    bootrom[addr as usize]
-                } else {
-                    self.cartridge.read(addr)
-                }
-            }
             0x0000..=0x7fff => self.cartridge.read(addr),
             0x8000..=0x9fff => self.ppu.read(addr),
             0xa000..=0xbfff => self.cartridge.read(addr),
