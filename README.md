@@ -19,8 +19,8 @@ Usage: rgb [OPTIONS] <rom-path>
 
 Options:
       --skip-bootrom
-  -c, --config <CONFIG>  Config file [default: config.toml]
-  -d, --debug            Enable debug logs
-  -s, --scale <SCALE>    Scale factor [default: 3]
-  -h, --help             Print help
+  -c, --config <CONFIG>    Config file [default: config.toml]
+  -l, --logfile <LOGFILE>  Enable debug logs
+      --disable-audio
+  -h, --help               Print help
 ```

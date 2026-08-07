@@ -2,6 +2,7 @@ mod apu;
 mod bus;
 mod config;
 mod cpu;
+mod debug;
 mod display;
 mod gb;
 mod hotkeys;

@@ -42,7 +42,7 @@ impl Gameboy {
             })
             .transpose()?;
         let apu = Apu::new(config.audio_volume, args.disable_audio);
-        let cpu = Cpu::new(bootrom, cartridge, apu, logfile);
+        let cpu = Cpu::new(bootrom, cartridge, apu, args.debug, logfile);
         Ok(Self { cpu, display })
     }
 }
