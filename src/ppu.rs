@@ -12,7 +12,8 @@ const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
 #[allow(non_snake_case)]
 pub struct Ppu {
-    vram: Box<[u8; 0x2000]>,
+    vram: Box<[u8; 0x4000]>,
+    vram_bank: bool,
     oam_ram: Box<[u8; 0xA0]>,
     LCDC: u8,
     STAT: u8,
@@ -51,6 +52,7 @@ struct Tile {
     priority: bool,
     x_flip: bool,
     y_flip: bool,
+    bank: bool,
 }
 
 impl Tile {
@@ -60,6 +62,7 @@ impl Tile {
             priority: attributes.bit(7),
             x_flip: attributes.bit(5),
             y_flip: attributes.bit(6),
+            bank: attributes.bit(3),
         }
     }
 }
@@ -105,7 +108,8 @@ enum PpuMode {
 impl Ppu {
     pub fn new() -> Self {
         Self {
-            vram: vec![0; 0x2000].try_into().unwrap(),
+            vram: vec![0; 0x4000].try_into().unwrap(),
+            vram_bank: false,
             oam_ram: vec![0; 0xA0].try_into().unwrap(),
             LCDC: 0,
             STAT: 0x80,
@@ -138,7 +142,7 @@ impl Ppu {
             0x8000..=0x9fff => match self.mode {
                 // FIXME: Enable after implementing variable mode 3 length
                 // PpuMode::Drawing => 0xff,
-                _ => self.read_vram(addr),
+                _ => self.read_vram(addr, self.vram_bank),
             },
             0xff40 => self.LCDC,
             0xff41 => self.STAT,
@@ -152,6 +156,7 @@ impl Ppu {
             0xff4a => self.WY,
             0xff4b => self.WX,
             0xff4c => 0xfb | ((self.dmg_compat as u8) << 2),
+            0xff4f => 0xfe | self.vram_bank as u8,
             _ => panic!("Invalid PPU Register read: {addr:04x}"),
         }
     }
@@ -163,8 +168,9 @@ impl Ppu {
         }
     }
 
-    fn read_vram(&self, idx: u16) -> u8 {
-        self.vram[idx as usize - 0x8000]
+    fn read_vram(&self, addr: u16, bank: bool) -> u8 {
+        let offset = if bank { 0x6000 } else { 0x8000 };
+        self.vram[addr as usize - offset]
     }
 
     pub fn write(&mut self, addr: u16, val: u8) {
@@ -172,7 +178,10 @@ impl Ppu {
             0x8000..=0x9fff => match self.mode {
                 // FIXME: Enable after implementing variable mode 3 length
                 // PpuMode::Drawing => {}
-                _ => self.vram[addr as usize - 0x8000] = val,
+                _ => {
+                    let offset = if self.vram_bank { 0x6000 } else { 0x8000 };
+                    self.vram[addr as usize - offset] = val;
+                }
             },
             0xff40 => {
                 if val.bit(7) && !self.LCDC.bit(7) {
@@ -194,6 +203,7 @@ impl Ppu {
             0xff4a => self.WY = val,
             0xff4b => self.WX = val,
             0xff4c => self.dmg_compat = val.bit(2),
+            0xff4f => self.vram_bank = val.bit(0),
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#04x}"),
         }
     }
@@ -374,13 +384,27 @@ impl Ppu {
         let mut visible = false;
         for i in 0..32 {
             let tilemap = if tilemap_bit { 0x9c00 } else { 0x9800 };
-            let tile_num = self.read_vram(tilemap + 32 * (y as u16 / 8) + i as u16);
+            let tile_addr = tilemap + 32 * (y as u16 / 8) + i as u16;
+            let tile = Tile::new(
+                self.read_vram(tile_addr, false),
+                self.read_vram(tile_addr, true),
+            );
+            let bank = !self.dmg_compat && tile.bank;
+            let row = if !self.dmg_compat && tile.y_flip {
+                7 - (y % 8)
+            } else {
+                y % 8
+            };
             for (j, &color_idx) in self
-                .decode_tile_row(tile_num, y % 8, false)
+                .decode_tile_row(tile.tile_num, bank, row, false)
                 .iter()
                 .enumerate()
             {
-                let col = 8 * i + j as u8;
+                let col = if !self.dmg_compat && tile.x_flip {
+                    8 * i + 7 - j as u8
+                } else {
+                    8 * i + j as u8
+                };
                 let x = if window {
                     col.saturating_add(x_offset)
                 } else {
@@ -415,7 +439,8 @@ impl Ppu {
                 sprite.tile.tile_num
             };
 
-            let tile_row = self.decode_tile_row(tile, row, true);
+            let bank = !self.dmg_compat && sprite.tile.bank;
+            let tile_row = self.decode_tile_row(tile, bank, row, true);
             let scanline = &mut self.viewport[self.LY as usize];
             for (i, &color_idx) in tile_row.iter().enumerate() {
                 let col = if sprite.tile.x_flip { 7 - i } else { i };
@@ -444,7 +469,7 @@ impl Ppu {
         }
     }
 
-    fn decode_tile_row(&self, tile_num: u8, row_num: u8, is_sprite: bool) -> [u8; 8] {
+    fn decode_tile_row(&self, tile_num: u8, bank: bool, row_num: u8, is_sprite: bool) -> [u8; 8] {
         let tile_addr = if self.LCDC.bit(4) || is_sprite {
             0x8000 + 16 * tile_num as u16
         } else {
@@ -452,8 +477,8 @@ impl Ppu {
         };
 
         let row_addr = tile_addr + 2 * row_num as u16;
-        let hi = self.read_vram(row_addr + 1);
-        let lo = self.read_vram(row_addr);
+        let hi = self.read_vram(row_addr + 1, bank);
+        let lo = self.read_vram(row_addr, bank);
 
         let mut row = [0; 8];
         for col in 0..8 {
