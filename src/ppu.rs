@@ -36,6 +36,7 @@ pub struct Ppu {
     pub draw: bool,
 
     first_lcd_frame: bool,
+    dmg_compat: bool,
 }
 
 struct Sprite {
@@ -116,6 +117,7 @@ impl Ppu {
             draw: false,
 
             first_lcd_frame: false,
+            dmg_compat: false,
         }
     }
 
@@ -137,6 +139,7 @@ impl Ppu {
             0xff49 => self.OBP1,
             0xff4a => self.WY,
             0xff4b => self.WX,
+            0xff4c => 0xfb | ((self.dmg_compat as u8) << 2),
             _ => panic!("Invalid PPU Register read: {addr:04x}"),
         }
     }
@@ -178,6 +181,7 @@ impl Ppu {
             0xff49 => self.OBP1 = val,
             0xff4a => self.WY = val,
             0xff4b => self.WX = val,
+            0xff4c => self.dmg_compat = val.bit(2),
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#04x}"),
         }
     }

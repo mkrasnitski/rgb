@@ -26,7 +26,7 @@ pub struct Args {
     pub logfile: Option<PathBuf>,
 
     #[arg(long, help = "Disable CGB mode")]
-    pub dmg_compat: bool,
+    pub dmg_mode: bool,
 
     #[arg(long)]
     pub uncap_framerate: bool,

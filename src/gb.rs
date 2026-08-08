@@ -24,7 +24,7 @@ impl Gameboy {
         let bootrom = if args.skip_bootrom {
             None
         } else {
-            let default_path = if args.dmg_compat {
+            let default_path = if args.dmg_mode {
                 "dmg_boot.bin"
             } else {
                 "cgb_boot.bin"
