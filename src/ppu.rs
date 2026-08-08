@@ -38,6 +38,7 @@ pub struct Ppu {
 
     first_lcd_frame: bool,
     dmg_compat: bool,
+    oam_sort: bool,
 }
 
 struct Sprite {
@@ -82,6 +83,7 @@ impl Sprite {
 struct Pixel {
     color_idx: u8,
     palette: u8,
+    priority: bool,
 }
 
 impl Pixel {
@@ -134,6 +136,7 @@ impl Ppu {
 
             first_lcd_frame: false,
             dmg_compat: false,
+            oam_sort: false,
         }
     }
 
@@ -157,6 +160,7 @@ impl Ppu {
             0xff4b => self.WX,
             0xff4c => 0xfb | ((self.dmg_compat as u8) << 2),
             0xff4f => 0xfe | self.vram_bank as u8,
+            0xff6c => 0xfe | self.oam_sort as u8,
             _ => panic!("Invalid PPU Register read: {addr:04x}"),
         }
     }
@@ -204,6 +208,7 @@ impl Ppu {
             0xff4b => self.WX = val,
             0xff4c => self.dmg_compat = val.bit(2),
             0xff4f => self.vram_bank = val.bit(0),
+            0xff6c => self.oam_sort = val.bit(0),
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#04x}"),
         }
     }
@@ -275,10 +280,13 @@ impl Ppu {
                     if let Some(sprite) = self.fetch_sprite(i)
                         && self.oam_sprites.len() < 10
                     {
-                        let idx = self
-                            .oam_sprites
-                            .binary_search_by(|s| sprite.x.cmp(&s.x))
-                            .unwrap_or_else(|e| e);
+                        let idx = if self.oam_sort || self.dmg_compat {
+                            self.oam_sprites
+                                .binary_search_by(|s| sprite.x.cmp(&s.x))
+                                .unwrap_or_else(|e| e)
+                        } else {
+                            0
+                        };
                         self.oam_sprites.insert(idx, sprite);
                     }
                 }
@@ -362,7 +370,7 @@ impl Ppu {
     }
 
     fn draw_line(&mut self) {
-        if self.LCDC.bit(0) {
+        if self.LCDC.bit(0) || !self.dmg_compat {
             // Background
             self.draw_tile_line(
                 self.LCDC.bit(3),
@@ -416,6 +424,7 @@ impl Ppu {
                     self.viewport[self.LY as usize][x as usize] = Pixel {
                         color_idx,
                         palette: self.BGP,
+                        priority: tile.priority,
                     }
                 }
             }
@@ -441,18 +450,23 @@ impl Ppu {
 
             let bank = !self.dmg_compat && sprite.tile.bank;
             let tile_row = self.decode_tile_row(tile, bank, row, true);
-            let scanline = &mut self.viewport[self.LY as usize];
             for (i, &color_idx) in tile_row.iter().enumerate() {
                 let col = if sprite.tile.x_flip { 7 - i } else { i };
                 let x = (sprite.x + col as u8).wrapping_sub(8);
-                if x < 160
-                    && color_idx != 0
-                    && (!sprite.tile.priority || scanline[x as usize].color_idx == 0)
-                {
-                    scanline[x as usize] = Pixel {
-                        color_idx,
-                        palette: if sprite.palette { self.OBP1 } else { self.OBP0 },
-                    };
+                if x < 160 {
+                    let pixel = &mut self.viewport[self.LY as usize][x as usize];
+                    let priority = pixel.priority && !self.dmg_compat;
+                    if color_idx != 0
+                        && (pixel.color_idx == 0
+                            || (!sprite.tile.priority && !priority)
+                            || (!self.LCDC.bit(0) && !self.dmg_compat))
+                    {
+                        *pixel = Pixel {
+                            color_idx,
+                            palette: if sprite.palette { self.OBP1 } else { self.OBP0 },
+                            priority: sprite.tile.priority,
+                        }
+                    }
                 }
             }
         }
