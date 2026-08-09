@@ -73,7 +73,8 @@ impl Mapper for MBC3Ram {
             0x2000..=0x3fff => self.mbc3.write(addr, val),
             0x4000..=0x5fff => {
                 if val <= 0x03 {
-                    self.ram_bank = val & 0b11;
+                    let num_ram_banks = self.ram.len().div_ceil(0x2000) as u8;
+                    self.ram_bank = (val & 0b11) % num_ram_banks;
                 } else {
                     panic!("Invalid MBC3 ram bank: {val:02x}")
                 }
