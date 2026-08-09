@@ -15,6 +15,8 @@ pub struct Ppu {
     vram: Box<[u8; 0x4000]>,
     vram_bank: bool,
     oam_ram: Box<[u8; 0xA0]>,
+    bgp_ram: Box<[u8; 0x40]>,
+    obp_ram: Box<[u8; 0x40]>,
     LCDC: u8,
     STAT: u8,
     SCY: u8,
@@ -22,8 +24,10 @@ pub struct Ppu {
     LY: u8,
     LYC: u8,
     BGP: u8,
+    BGPI: u8,
     OBP0: u8,
     OBP1: u8,
+    OBPI: u8,
     WY: u8,
     WX: u8,
     WC: u8,
@@ -54,6 +58,7 @@ struct Tile {
     x_flip: bool,
     y_flip: bool,
     bank: bool,
+    cgb_palette: u8,
 }
 
 impl Tile {
@@ -64,6 +69,7 @@ impl Tile {
             x_flip: attributes.bit(5),
             y_flip: attributes.bit(6),
             bank: attributes.bit(3),
+            cgb_palette: attributes & 0b111,
         }
     }
 }
@@ -82,19 +88,25 @@ impl Sprite {
 #[derive(Copy, Clone, Default)]
 struct Pixel {
     color_idx: u8,
-    palette: u8,
+    palette: Palette,
     priority: bool,
 }
 
-impl Pixel {
-    fn color(&self) -> [u8; 4] {
-        match (self.palette >> (2 * self.color_idx)) & 0b11 {
-            0 => WHITE,
-            1 => LIGHT_GRAY,
-            2 => DARK_GRAY,
-            3 => BLACK,
-            _ => unreachable!(),
-        }
+#[derive(Copy, Clone)]
+enum Palette {
+    Monochrome(u8),
+    Color { idx: u8, kind: ColorKind },
+}
+
+#[derive(Copy, Clone)]
+enum ColorKind {
+    Background,
+    Object,
+}
+
+impl Default for Palette {
+    fn default() -> Self {
+        Palette::Monochrome(0)
     }
 }
 
@@ -113,6 +125,8 @@ impl Ppu {
             vram: vec![0; 0x4000].try_into().unwrap(),
             vram_bank: false,
             oam_ram: vec![0; 0xA0].try_into().unwrap(),
+            bgp_ram: vec![0; 0x40].try_into().unwrap(),
+            obp_ram: vec![0; 0x40].try_into().unwrap(),
             LCDC: 0,
             STAT: 0x80,
             SCY: 0,
@@ -120,8 +134,10 @@ impl Ppu {
             LY: 0,
             LYC: 0,
             BGP: 0,
+            BGPI: 0,
             OBP0: 0,
             OBP1: 0,
+            OBPI: 0,
             WY: 0,
             WX: 0,
             WC: 0,
@@ -160,6 +176,10 @@ impl Ppu {
             0xff4b => self.WX,
             0xff4c => 0xfb | ((self.dmg_compat as u8) << 2),
             0xff4f => 0xfe | self.vram_bank as u8,
+            0xff68 => self.BGPI,
+            0xff69 => self.bgp_ram[self.BGPI as usize & 0x3f],
+            0xff6a => self.OBPI,
+            0xff6b => self.obp_ram[self.OBPI as usize & 0x3f],
             0xff6c => 0xfe | self.oam_sort as u8,
             _ => panic!("Invalid PPU Register read: {addr:04x}"),
         }
@@ -208,6 +228,20 @@ impl Ppu {
             0xff4b => self.WX = val,
             0xff4c => self.dmg_compat = val.bit(2),
             0xff4f => self.vram_bank = val.bit(0),
+            0xff68 => self.BGPI = val | 0x40,
+            0xff69 => {
+                self.bgp_ram[self.BGPI as usize & 0x3f] = val;
+                if self.BGPI.bit(7) {
+                    self.BGPI = (self.BGPI + 1) & 0xbf;
+                }
+            }
+            0xff6a => self.OBPI = val | 0x40,
+            0xff6b => {
+                self.obp_ram[self.OBPI as usize & 0x3f] = val;
+                if self.OBPI.bit(7) {
+                    self.OBPI = (self.OBPI + 1) & 0xbf;
+                }
+            }
             0xff6c => self.oam_sort = val.bit(0),
             _ => panic!("Invalid PPU Register write: {addr:04x} = {val:#04x}"),
         }
@@ -343,7 +377,7 @@ impl Ppu {
     pub fn render(&mut self, pixels: &mut Pixels) -> Result<()> {
         for (idx, pixel) in pixels.frame_mut().chunks_exact_mut(4).enumerate() {
             let color = if self.LCDC.bit(7) && !self.first_lcd_frame {
-                self.viewport[idx / 160][idx % 160].color()
+                self.pixel_color(self.viewport[idx / 160][idx % 160])
             } else {
                 WHITE
             };
@@ -354,6 +388,36 @@ impl Ppu {
         Ok(())
     }
 
+    fn pixel_color(&self, pixel: Pixel) -> [u8; 4] {
+        match pixel.palette {
+            Palette::Monochrome(idx) => match (idx >> (2 * pixel.color_idx)) & 0b11 {
+                0 => WHITE,
+                1 => LIGHT_GRAY,
+                2 => DARK_GRAY,
+                3 => BLACK,
+                _ => unreachable!(),
+            },
+            Palette::Color { idx, kind } => {
+                let color_idx = 8 * idx as usize + 2 * pixel.color_idx as usize;
+                let palette_ram = match kind {
+                    ColorKind::Background => &self.bgp_ram,
+                    ColorKind::Object => &self.obp_ram,
+                };
+                let color =
+                    u16::from_le_bytes([palette_ram[color_idx], palette_ram[color_idx + 1]]);
+                let blue = (color >> 10) & 0x1f;
+                let green = (color >> 5) & 0x1f;
+                let red = color & 0x1f;
+                [
+                    (red << 3 | red >> 2) as u8,
+                    (green << 3 | green >> 2) as u8,
+                    (blue << 3 | blue >> 2) as u8,
+                    0xff,
+                ]
+            }
+        }
+    }
+
     pub fn screenshot(&self, path: impl AsRef<Path>) -> Result<()> {
         ImageBuffer::<Rgba<_>, _>::from_vec(
             160,
@@ -361,7 +425,7 @@ impl Ppu {
             self.viewport
                 .iter()
                 .flatten()
-                .flat_map(Pixel::color)
+                .flat_map(|&p| self.pixel_color(p))
                 .collect(),
         )
         .unwrap()
@@ -423,7 +487,14 @@ impl Ppu {
                     visible = true;
                     self.viewport[self.LY as usize][x as usize] = Pixel {
                         color_idx,
-                        palette: self.BGP,
+                        palette: if self.dmg_compat {
+                            Palette::Monochrome(self.BGP)
+                        } else {
+                            Palette::Color {
+                                idx: tile.cgb_palette,
+                                kind: ColorKind::Background,
+                            }
+                        },
                         priority: tile.priority,
                     }
                 }
@@ -461,9 +532,18 @@ impl Ppu {
                             || (!sprite.tile.priority && !priority)
                             || (!self.LCDC.bit(0) && !self.dmg_compat))
                     {
+                        let palette = if self.dmg_compat {
+                            let dmg_palette = if sprite.palette { self.OBP1 } else { self.OBP0 };
+                            Palette::Monochrome(dmg_palette)
+                        } else {
+                            Palette::Color {
+                                idx: sprite.tile.cgb_palette,
+                                kind: ColorKind::Object,
+                            }
+                        };
                         *pixel = Pixel {
                             color_idx,
-                            palette: if sprite.palette { self.OBP1 } else { self.OBP0 },
+                            palette,
                             priority: sprite.tile.priority,
                         }
                     }

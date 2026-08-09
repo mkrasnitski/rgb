@@ -158,7 +158,7 @@ impl MemoryBus {
                 self.apu.read(addr)
             }
 
-            0xff40..=0xff45 | 0xff47..=0xff4c | 0xff4f | 0xff6c => self.ppu.read(addr),
+            0xff40..=0xff45 | 0xff47..=0xff4c | 0xff4f | 0xff68..=0xff6c => self.ppu.read(addr),
 
             0xff46 => self.dma.base,
             0xff50 => 0xff,
@@ -176,7 +176,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4d..=0xff4e
-            | 0xff51..=0xff6b
+            | 0xff51..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => 0xff,
         }
@@ -231,7 +231,9 @@ impl MemoryBus {
                 self.apu.write(addr, val)
             }
 
-            0xff40..=0xff45 | 0xff47..=0xff4b | 0xff4f | 0xff6c => self.ppu.write(addr, val),
+            0xff40..=0xff45 | 0xff47..=0xff4b | 0xff4f | 0xff68..=0xff6c => {
+                self.ppu.write(addr, val)
+            }
             0xff4c => {
                 if self.bootrom_enabled {
                     self.ppu.write(addr, val)
@@ -260,7 +262,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4d..=0xff4e
-            | 0xff51..=0xff6b
+            | 0xff51..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => {}
         }
