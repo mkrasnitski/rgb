@@ -34,11 +34,11 @@ impl Default for Timers {
 }
 
 impl Timers {
-    pub fn increment(&mut self, apu: &mut Apu) -> bool {
+    pub fn increment(&mut self, apu: &mut Apu, apu_bit: u8) -> bool {
         let old_div = self.div;
         self.div = self.div.wrapping_add(4);
         // Tick Apu FS on falling edge of bit 12
-        if old_div.bit(12) && !self.div.bit(12) {
+        if old_div.bit(apu_bit) && !self.div.bit(apu_bit) {
             apu.tick_frame_sequencer();
         }
         let bit = match self.tac & 0b11 {
@@ -84,6 +84,8 @@ pub struct MemoryBus {
     pub timers: Timers,
     pub joypad: Joypad,
     bootrom_enabled: bool,
+    pub double_speed: bool,
+    pub prepare_speed_switch: bool,
     pub int_flag: u8,
     pub int_enable: u8,
 }
@@ -102,6 +104,8 @@ impl MemoryBus {
             hram: vec![0; 0x7f].try_into().unwrap(),
             timers: Timers::default(),
             joypad: Joypad::default(),
+            double_speed: false,
+            prepare_speed_switch: false,
             int_flag: 0xE0,
             int_enable: 0,
         }
@@ -163,6 +167,8 @@ impl MemoryBus {
             0xff46 => self.dma.base,
             0xff50 => 0xff,
 
+            0xff4d => ((self.double_speed as u8) << 7) | self.prepare_speed_switch as u8 | 0x7e,
+
             0xff70 => self.wram_bank | 0xf8,
 
             // stubs
@@ -175,7 +181,7 @@ impl MemoryBus {
             | 0xff15
             | 0xff1f
             | 0xff27..=0xff2f
-            | 0xff4d..=0xff4e
+            | 0xff4e
             | 0xff51..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => 0xff,
@@ -250,6 +256,8 @@ impl MemoryBus {
                 }
             }
 
+            0xff4d => self.prepare_speed_switch = val.bit(0),
+
             0xff70 => self.wram_bank = val & 0b111,
 
             // stubs
@@ -261,7 +269,7 @@ impl MemoryBus {
             | 0xff15
             | 0xff1f
             | 0xff27..=0xff2f
-            | 0xff4d..=0xff4e
+            | 0xff4e
             | 0xff51..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => {}

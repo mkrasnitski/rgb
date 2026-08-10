@@ -21,6 +21,7 @@ pub struct Cpu {
     registers: Registers,
     memory: MemoryBus,
     cycles: u64,
+    cycle_parity: bool,
     ime: bool,
     halted: bool,
     logfile: Option<BufWriter<Box<dyn Write>>>,
@@ -53,6 +54,7 @@ impl Cpu {
             memory: MemoryBus::new(bootrom, cartridge, apu),
             registers: Registers::default(),
             cycles: 0,
+            cycle_parity: false,
             ime: false,
             halted: false,
             logfile: logfile.map(BufWriter::new),
@@ -180,22 +182,29 @@ impl Cpu {
 
     fn mtick(&mut self) {
         self.memory.tick_dma();
-        if self.memory.timers.increment(&mut self.memory.apu) {
+        let apu_bit = if self.memory.double_speed { 13 } else { 12 };
+        if self.memory.timers.increment(&mut self.memory.apu, apu_bit) {
             self.request_interrupt(Interrupt::Timer);
         }
-        self.memory.cartridge.increment_rtc();
         if self.memory.joypad.poll() {
             self.request_interrupt(Interrupt::Joypad);
         }
-        let (vblank, stat) = self.ppu_mut().step();
-        self.memory.apu.tick();
-        if vblank {
-            self.request_interrupt(Interrupt::VBlank);
+
+        // In double speed mode, tick the PPU and APU at 1Mhz, so every other cycle
+        if !self.memory.double_speed || self.cycle_parity {
+            self.memory.cartridge.increment_rtc();
+            let (vblank, stat) = self.ppu_mut().step();
+            self.memory.apu.tick();
+            if vblank {
+                self.request_interrupt(Interrupt::VBlank);
+            }
+            if stat {
+                self.request_interrupt(Interrupt::Stat);
+            }
         }
-        if stat {
-            self.request_interrupt(Interrupt::Stat);
-        }
+
         self.cycles += 1;
+        self.cycle_parity = !self.cycle_parity
     }
 
     pub fn toggle_frame_limiter(&mut self) {
@@ -688,7 +697,13 @@ impl Cpu {
 
             Instruction::Halt => self.halted = true,
             Instruction::Stop => {
-                // panic!("Unimplemented instruction: {:?}", instr)
+                if self.memory.prepare_speed_switch {
+                    self.memory.double_speed = !self.memory.double_speed;
+                    self.memory.prepare_speed_switch = false;
+                    self.cycle_parity = false;
+                } else {
+                    panic!("STOP reached without arming speed switch");
+                }
             }
         }
 
