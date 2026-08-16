@@ -77,6 +77,7 @@ pub struct MemoryBus {
     pub cartridge: Cartridge,
     ppu: Ppu,
     dma: Dma,
+    vdma: Vdma,
     pub apu: Apu,
     wram: Box<[u8; 0x8000]>,
     wram_bank: u8,
@@ -99,6 +100,7 @@ impl MemoryBus {
             apu,
             ppu: Ppu::new(),
             dma: Dma::default(),
+            vdma: Vdma::default(),
             wram: vec![0; 0x8000].try_into().unwrap(),
             wram_bank: 0,
             hram: vec![0; 0x7f].try_into().unwrap(),
@@ -169,6 +171,9 @@ impl MemoryBus {
 
             0xff4d => ((self.double_speed as u8) << 7) | self.prepare_speed_switch as u8 | 0x7e,
 
+            0xff51..=0xff54 => 0xff,
+            0xff55 => self.vdma.length.unwrap_or(0xff),
+
             0xff70 => self.wram_bank | 0xf8,
 
             // stubs
@@ -182,7 +187,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4e
-            | 0xff51..=0xff67
+            | 0xff56..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => 0xff,
         }
@@ -258,6 +263,40 @@ impl MemoryBus {
 
             0xff4d => self.prepare_speed_switch = val.bit(0),
 
+            0xff51 => {
+                self.vdma.src = (self.vdma.src & 0x00ff) | ((val as u16) << 8);
+                self.vdma.src_offset = 0;
+                println!("src = {:04x}", self.vdma.src);
+            }
+            0xff52 => {
+                self.vdma.src = (self.vdma.src & 0xff00) | (val & 0xf0) as u16;
+                self.vdma.src_offset = 0;
+                println!("src = {:04x}", self.vdma.src);
+            }
+            0xff53 => {
+                self.vdma.dest = (self.vdma.dest & 0x00ff) | ((val as u16) << 8);
+                println!("dest = {:04x}", self.vdma.dest);
+            }
+            0xff54 => {
+                self.vdma.dest = (self.vdma.dest & 0xff00) | (val & 0xf0) as u16;
+                self.vdma.dest_offset = 0;
+                println!("dest = {:04x}", self.vdma.dest);
+            }
+            0xff55 => {
+                if val.bit(7) {
+                    println!("HDMA {}", val & 0x7f);
+                    self.vdma.start(val & 0x7f, true);
+                } else {
+                    println!("GDMA {} {:04x}", val & 0x7f, self.vdma.src_offset);
+                    if self.vdma.hblank {
+                        self.vdma.cancelled = true;
+                        self.vdma.length = Some(val & 0x7f);
+                    } else {
+                        self.vdma.start(val & 0x7f, false);
+                    }
+                }
+            }
+
             0xff70 => self.wram_bank = val & 0b111,
 
             // stubs
@@ -270,7 +309,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4e
-            | 0xff51..=0xff67
+            | 0xff56..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => {}
         }
@@ -284,6 +323,46 @@ impl MemoryBus {
             };
             self.ppu.write_dma(slot, val);
         }
+    }
+
+    pub fn vdma_enabled(&self, hdma_enable: bool) -> bool {
+        self.vdma.length.is_some() && (!self.vdma.hblank || hdma_enable) && !self.vdma.cancelled
+    }
+
+    pub fn tick_vdma(&mut self, hdma_enable: bool) -> bool {
+        if let Some(length) = self.vdma.length
+            && (!self.vdma.hblank || hdma_enable)
+            && !self.vdma.cancelled
+        {
+            let val = self.read(self.vdma.src + self.vdma.src_offset);
+            let (dest_offset, overflow) = self.vdma.dest.overflowing_add(self.vdma.dest_offset);
+            if overflow {
+                self.vdma.length = None;
+                return true;
+            }
+            self.write(0x8000 + (dest_offset & 0x1fff), val);
+
+            self.vdma.src_offset += 1;
+            self.vdma.dest_offset += 1;
+            if self.vdma.src_offset.is_multiple_of(16) {
+                // println!(
+                //     "{} {} {} {} {:?}",
+                //     self.ppu.LY,
+                //     self.ppu.cycles - 16,
+                //     self.vdma.hblank,
+                //     hdma_enable,
+                //     self.ppu.mode
+                // );
+                self.vdma.length = length.checked_sub(1);
+                // if self.vdma.length.is_none() {
+                //     for i in 0..16 {
+                //         println!("{:02x?}", &self.ppu.vram[8 * i..8 * i + 8])
+                //     }
+                // }
+                return true;
+            }
+        }
+        false
     }
 
     pub fn ppu_mut(&mut self) -> &mut Ppu {
@@ -316,5 +395,24 @@ impl Dma {
             }
         }
         None
+    }
+}
+
+#[derive(Default)]
+struct Vdma {
+    src: u16,
+    dest: u16,
+    src_offset: u16,
+    dest_offset: u16,
+    length: Option<u8>,
+    hblank: bool,
+    cancelled: bool,
+}
+
+impl Vdma {
+    fn start(&mut self, length: u8, hblank: bool) {
+        self.length = Some(length);
+        self.hblank = hblank;
+        self.cancelled = false;
     }
 }

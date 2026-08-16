@@ -25,6 +25,7 @@ pub struct Cpu {
     ime: bool,
     halted: bool,
     logfile: Option<BufWriter<Box<dyn Write>>>,
+    hdma_enable: bool,
 }
 
 impl fmt::Debug for Cpu {
@@ -58,6 +59,7 @@ impl Cpu {
             ime: false,
             halted: false,
             logfile: logfile.map(BufWriter::new),
+            hdma_enable: false,
         };
 
         if skip_bootrom {
@@ -144,7 +146,7 @@ impl Cpu {
 
     pub fn step(&mut self) -> Result<()> {
         self.check_for_interrupts();
-        if self.halted {
+        if self.halted || self.memory.vdma_enabled(self.hdma_enable) {
             self.mtick();
         } else {
             let cycles = self.cycles;
@@ -192,11 +194,18 @@ impl Cpu {
 
         // In double speed mode, tick the PPU and APU at 1Mhz, so every other cycle
         if !self.memory.double_speed || self.cycle_parity {
+            if self.memory.tick_vdma(self.hdma_enable) {
+                self.hdma_enable = false;
+            }
             self.memory.cartridge.increment_rtc();
-            let (vblank, stat) = self.ppu_mut().step();
+            let (vblank, hblank, stat) = self.ppu_mut().step();
             self.memory.apu.tick();
             if vblank {
                 self.request_interrupt(Interrupt::VBlank);
+                self.hdma_enable = false;
+            }
+            if hblank {
+                self.hdma_enable = true;
             }
             if stat {
                 self.request_interrupt(Interrupt::Stat);
@@ -699,6 +708,11 @@ impl Cpu {
             Instruction::Stop => {
                 if self.memory.prepare_speed_switch {
                     self.memory.double_speed = !self.memory.double_speed;
+                    if self.memory.double_speed {
+                        println!("Double speed");
+                    } else {
+                        println!("Normal speed");
+                    }
                     self.memory.prepare_speed_switch = false;
                     self.cycle_parity = false;
                 } else {

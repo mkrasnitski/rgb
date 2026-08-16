@@ -12,7 +12,7 @@ const BLACK: [u8; 4] = [0x00, 0x00, 0x00, 0xff];
 
 #[allow(non_snake_case)]
 pub struct Ppu {
-    vram: Box<[u8; 0x4000]>,
+    pub vram: Box<[u8; 0x4000]>,
     vram_bank: bool,
     oam_ram: Box<[u8; 0xA0]>,
     bgp_ram: Box<[u8; 0x40]>,
@@ -21,7 +21,7 @@ pub struct Ppu {
     STAT: u8,
     SCY: u8,
     SCX: u8,
-    LY: u8,
+    pub LY: u8,
     LYC: u8,
     BGP: u8,
     BGPI: u8,
@@ -32,11 +32,11 @@ pub struct Ppu {
     WX: u8,
     WC: u8,
 
-    mode: PpuMode,
+    pub mode: PpuMode,
     stat_condition: bool,
     viewport: Box<[[Pixel; 160]; 144]>,
     oam_sprites: Vec<Sprite>,
-    cycles: u16,
+    pub cycles: u16,
     ticks: u16,
     pub draw: bool,
 
@@ -110,9 +110,9 @@ impl Default for Palette {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
-enum PpuMode {
+pub enum PpuMode {
     OamScan = 2,
     Drawing = 3,
     HBlank = 0,
@@ -258,29 +258,30 @@ impl Ppu {
         self.oam_ram[oam_slot as usize] = val;
     }
 
-    pub fn step(&mut self) -> (bool, bool) {
+    pub fn step(&mut self) -> (bool, bool, bool) {
         if self.ticks == 17556 {
             self.ticks = 0;
             self.draw = true;
         }
 
         if self.LCDC.bit(7) {
-            let (vblank, stat) = self.cycle();
+            let (vblank, hblank, stat) = self.cycle();
             self.ticks = self.cycles + 1;
             self.cycles = (self.cycles + 1) % 17556;
-            (vblank, stat)
+            (vblank, hblank, stat)
         } else {
             // Hold everything to 0 while PPU is disabled
             self.cycles = 0;
             self.LY = 0;
             self.set_mode(PpuMode::HBlank);
             self.ticks += 1;
-            (false, false)
+            (false, false, false)
         }
     }
 
-    fn cycle(&mut self) -> (bool, bool) {
+    fn cycle(&mut self) -> (bool, bool, bool) {
         let mut vblank = false;
+        let mut hblank = false;
 
         let clocks = self.cycles % 114;
         let scanline = self.cycles / 114;
@@ -303,6 +304,7 @@ impl Ppu {
                 // TODO: Variable mode 3 length
                 if clocks == 63 {
                     self.set_mode(PpuMode::HBlank);
+                    hblank = true;
                 }
             }
 
@@ -336,7 +338,7 @@ impl Ppu {
         let ly_coincidence = self.check_lyc();
         let stat = self.check_stat(ly_coincidence);
 
-        (vblank, stat)
+        (vblank, hblank, stat)
     }
 
     fn set_mode(&mut self, mode: PpuMode) {
