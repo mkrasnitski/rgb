@@ -193,8 +193,11 @@ impl Cpu {
         // In double speed mode, tick the PPU and APU at 1Mhz, so every other cycle
         if !self.memory.double_speed || self.cycle_parity {
             self.memory.cartridge.increment_rtc();
-            let (vblank, stat) = self.ppu_mut().step();
+            let (vblank, hblank, stat) = self.ppu_mut().step();
             self.memory.apu.tick();
+            if hblank && !self.halted {
+                self.memory.tick_vdma(true);
+            }
             if vblank {
                 self.request_interrupt(Interrupt::VBlank);
             }

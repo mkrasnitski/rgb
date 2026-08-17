@@ -77,6 +77,7 @@ pub struct MemoryBus {
     pub cartridge: Cartridge,
     ppu: Ppu,
     dma: Dma,
+    vdma: Vdma,
     pub apu: Apu,
     wram: Box<[u8; 0x8000]>,
     wram_bank: u8,
@@ -99,6 +100,7 @@ impl MemoryBus {
             apu,
             ppu: Ppu::new(),
             dma: Dma::default(),
+            vdma: Vdma::default(),
             wram: vec![0; 0x8000].try_into().unwrap(),
             wram_bank: 0,
             hram: vec![0; 0x7f].try_into().unwrap(),
@@ -169,6 +171,9 @@ impl MemoryBus {
 
             0xff4d => ((self.double_speed as u8) << 7) | self.prepare_speed_switch as u8 | 0x7e,
 
+            0xff51..=0xff54 => 0xff,
+            0xff55 => self.vdma.length.unwrap_or(0xff),
+
             0xff70 => self.wram_bank | 0xf8,
 
             // stubs
@@ -182,7 +187,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4e
-            | 0xff51..=0xff67
+            | 0xff56..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => 0xff,
         }
@@ -258,6 +263,21 @@ impl MemoryBus {
 
             0xff4d => self.prepare_speed_switch = val.bit(0),
 
+            0xff51 => self.vdma.src = (self.vdma.src & 0x00ff) | ((val as u16) << 8),
+            0xff52 => self.vdma.src = (self.vdma.src & 0xff00) | (val & 0xf0) as u16,
+            0xff53 => self.vdma.dest = (self.vdma.dest & 0x00ff) | (((val & 0x1f) as u16) << 8),
+            0xff54 => self.vdma.dest = (self.vdma.dest & 0xff00) | (val & 0xf0) as u16,
+            0xff55 => {
+                if val.bit(7) {
+                    self.vdma.start(val & 0x7f, true);
+                } else {
+                    self.vdma.start(val & 0x7f, false);
+                    while self.vdma.length.is_some() {
+                        self.tick_vdma(false)
+                    }
+                }
+            }
+
             0xff70 => self.wram_bank = val & 0b111,
 
             // stubs
@@ -270,7 +290,7 @@ impl MemoryBus {
             | 0xff1f
             | 0xff27..=0xff2f
             | 0xff4e
-            | 0xff51..=0xff67
+            | 0xff56..=0xff67
             | 0xff6d..=0xff6f
             | 0xff71..=0xff7f => {}
         }
@@ -283,6 +303,20 @@ impl MemoryBus {
                 0xe000..=0xffff => self.wram[addr as usize - 0xe000],
             };
             self.ppu.write_dma(slot, val);
+        }
+    }
+
+    pub fn tick_vdma(&mut self, hblank: bool) {
+        if let Some(length) = self.vdma.length
+            && (!hblank || self.vdma.hblank)
+        {
+            for i in 0..16 {
+                let offset = self.vdma.offset + i;
+                let val = self.read(self.vdma.src + offset);
+                self.write(0x8000 + self.vdma.dest + offset, val);
+            }
+            self.vdma.offset += 16;
+            self.vdma.length = length.checked_sub(1);
         }
     }
 
@@ -316,5 +350,22 @@ impl Dma {
             }
         }
         None
+    }
+}
+
+#[derive(Default)]
+struct Vdma {
+    src: u16,
+    dest: u16,
+    offset: u16,
+    length: Option<u8>,
+    hblank: bool,
+}
+
+impl Vdma {
+    fn start(&mut self, length: u8, hblank: bool) {
+        self.length = Some(length);
+        self.hblank = hblank;
+        self.offset = 0;
     }
 }
