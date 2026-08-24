@@ -6,6 +6,7 @@ use anyhow::Result;
 
 #[derive(Debug)]
 pub enum DebuggerAction {
+    Info,
     Continue,
     Step,
     SetBreakpoint(u16),
@@ -31,13 +32,14 @@ impl FromStr for DebuggerAction {
     fn from_str(s: &str) -> Result<DebuggerAction, Self::Err> {
         let (cmd, rest) = s.split_once(' ').unwrap_or((s, ""));
         let action = match cmd {
-            "c" => DebuggerAction::Continue,
-            "s" => DebuggerAction::Step,
-            "b" => match parse_address(rest) {
+            "i" | "info" => DebuggerAction::Info,
+            "c" | "continue" => DebuggerAction::Continue,
+            "s" | "step" => DebuggerAction::Step,
+            "b" | "break" => match parse_address(rest) {
                 Ok(addr) => DebuggerAction::SetBreakpoint(addr),
                 Err(e) => return Err(DebuggerError::InvalidValue(rest.to_string(), e)),
             },
-            "d" => match rest.parse() {
+            "d" | "del" | "delete" => match rest.parse() {
                 Ok(index) => DebuggerAction::DeleteBreakpoint(index),
                 Err(e) => return Err(DebuggerError::InvalidValue(rest.to_string(), e)),
             },
@@ -60,26 +62,8 @@ impl Debugger {
         }
     }
 
-    pub fn handle_action(&mut self) -> Result<()> {
-        while self.trap {
-            match self.parse_next_action()? {
-                DebuggerAction::Continue => self.trap = false,
-                DebuggerAction::Step => {}
-                DebuggerAction::SetBreakpoint(address) => {
-                    if self.find_breakpoint(address).is_none() {
-                        self.breakpoints.push(Some(address))
-                    }
-                }
-                DebuggerAction::DeleteBreakpoint(index) => {
-                    if let Some(breakpoint) = self.breakpoints.get_mut(index) {
-                        breakpoint.take();
-                        let end = self.breakpoints.iter().rposition(Option::is_some);
-                        self.breakpoints.truncate(end.map_or(0, |idx| idx + 1));
-                    }
-                }
-            }
-        }
-        Ok(())
+    pub fn next_action(&mut self) -> Option<Result<DebuggerAction>> {
+        self.trap.then(|| self.parse_next_action())
     }
 
     fn parse_next_action(&mut self) -> Result<DebuggerAction> {
@@ -103,10 +87,28 @@ impl Debugger {
         }
     }
 
-    pub fn check_breakpoints(&mut self, address: u16) {
+    pub fn try_break(&mut self, address: u16) {
         if let Some(idx) = self.find_breakpoint(address) {
             println!("Breakpoint {idx} @ {address:#06x}");
             self.trap = true;
+        }
+    }
+
+    pub fn untrap(&mut self) {
+        self.trap = false;
+    }
+
+    pub fn set_breakpoint(&mut self, address: u16) {
+        if self.find_breakpoint(address).is_none() {
+            self.breakpoints.push(Some(address))
+        }
+    }
+
+    pub fn delete_breakpoint(&mut self, index: usize) {
+        if let Some(breakpoint) = self.breakpoints.get_mut(index) {
+            breakpoint.take();
+            let end = self.breakpoints.iter().rposition(Option::is_some);
+            self.breakpoints.truncate(end.map_or(0, |idx| idx + 1));
         }
     }
 

@@ -9,7 +9,7 @@ mod registers;
 use crate::apu::Apu;
 use crate::bus::joypad::Joypad;
 use crate::bus::{Cartridge, MemoryBus};
-use crate::debug::Debugger;
+use crate::debug::{Debugger, DebuggerAction};
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use instruction::*;
@@ -21,7 +21,6 @@ pub struct Cpu {
     cycles: u64,
     ime: bool,
     halted: bool,
-    debugger: Option<Debugger>,
     logfile: Option<BufWriter<Box<dyn Write>>>,
 }
 
@@ -45,7 +44,6 @@ impl Cpu {
         bootrom: Option<[u8; 0x100]>,
         cartridge: Cartridge,
         apu: Apu,
-        debug: bool,
         logfile: Option<Box<dyn Write>>,
     ) -> Self {
         let mut cpu = Self {
@@ -54,7 +52,6 @@ impl Cpu {
             cycles: 0,
             ime: false,
             halted: false,
-            debugger: debug.then(Debugger::new),
             logfile: logfile.map(BufWriter::new),
         };
 
@@ -93,11 +90,21 @@ impl Cpu {
         self.memory.cartridge.save_external_ram()
     }
 
-    pub fn run_frame(&mut self) -> Result<()> {
+    pub fn run_frame(&mut self, debugger: &mut Option<Debugger>) -> Result<()> {
         loop {
-            if let Some(debugger) = self.debugger.as_mut() {
-                debugger.check_breakpoints(self.registers.pc);
-                debugger.handle_action()?;
+            if let Some(debugger) = debugger.as_mut() {
+                debugger.try_break(self.registers.pc);
+                while let Some(action) = debugger.next_action().transpose()? {
+                    match action {
+                        DebuggerAction::Info => println!("{self:?}"),
+                        DebuggerAction::Continue => debugger.untrap(),
+                        DebuggerAction::Step => break,
+                        DebuggerAction::SetBreakpoint(address) => debugger.set_breakpoint(address),
+                        DebuggerAction::DeleteBreakpoint(index) => {
+                            debugger.delete_breakpoint(index)
+                        }
+                    }
+                }
             }
             self.step()?;
             if self.ppu_mut().draw_check() {

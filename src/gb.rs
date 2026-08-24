@@ -9,12 +9,14 @@ use crate::apu::Apu;
 use crate::bus::Cartridge;
 use crate::config::{Args, Config};
 use crate::cpu::Cpu;
+use crate::debug::Debugger;
 use crate::display::{Display, DisplayEvent};
 use crate::hotkeys::Hotkey;
 
 pub struct Gameboy {
     cpu: Cpu,
     display: Display,
+    debugger: Option<Debugger>,
 }
 
 impl Gameboy {
@@ -42,8 +44,12 @@ impl Gameboy {
             })
             .transpose()?;
         let apu = Apu::new(config.audio_volume, args.disable_audio);
-        let cpu = Cpu::new(bootrom, cartridge, apu, args.debug, logfile);
-        Ok(Self { cpu, display })
+        let cpu = Cpu::new(bootrom, cartridge, apu, logfile);
+        Ok(Self {
+            cpu,
+            display,
+            debugger: args.debug.then(Debugger::new),
+        })
     }
 }
 
@@ -59,7 +65,7 @@ impl ApplicationHandler for Gameboy {
         if let Some(display_event) = self.display.process_event(&event) {
             match display_event {
                 DisplayEvent::RedrawRequested => {
-                    if let Err(e) = self.display.draw_frame(&mut self.cpu) {
+                    if let Err(e) = self.display.draw_frame(&mut self.cpu, &mut self.debugger) {
                         println!("{e:?}");
                         self.display.quit(event_loop);
                     }

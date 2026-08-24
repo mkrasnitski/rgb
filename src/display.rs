@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::cpu::Cpu;
+use crate::debug::Debugger;
 use crate::hotkeys::{Hotkey, KeyMap};
 
 use anyhow::Result;
@@ -52,9 +53,9 @@ impl Display {
         event_loop.exit();
     }
 
-    pub fn draw_frame(&mut self, cpu: &mut Cpu) -> Result<()> {
+    pub fn draw_frame(&mut self, cpu: &mut Cpu, debugger: &mut Option<Debugger>) -> Result<()> {
         if let Some(surface) = &mut self.surface {
-            cpu.run_frame()?;
+            cpu.run_frame(debugger)?;
             if self.limit_framerate {
                 self.frame_limiter.tick();
             }
