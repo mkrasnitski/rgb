@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::num::ParseIntError;
+use std::num::{NonZeroU32, ParseIntError};
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -9,7 +9,8 @@ pub enum DebuggerAction {
     Info,
     Continue,
     Step,
-    SetBreakpoint(u16),
+    FrameAdvance(NonZeroU32),
+    SetBreakpoint(BreakpointTarget),
     DeleteBreakpoint(usize),
 }
 
@@ -26,18 +27,38 @@ fn parse_address(s: &str) -> Result<u16, ParseIntError> {
     }
 }
 
+fn parse_frame_count(s: &str) -> Result<NonZeroU32, ParseIntError> {
+    if s.is_empty() {
+        Ok(NonZeroU32::MIN)
+    } else {
+        s.parse()
+    }
+}
+
 impl FromStr for DebuggerAction {
     type Err = DebuggerError;
 
     fn from_str(s: &str) -> Result<DebuggerAction, Self::Err> {
         let (cmd, rest) = s.split_once(' ').unwrap_or((s, ""));
+        let rest = rest.trim();
         let action = match cmd {
             "i" | "info" => DebuggerAction::Info,
             "c" | "continue" => DebuggerAction::Continue,
             "s" | "step" => DebuggerAction::Step,
+            "f" | "frame" => {
+                let n = parse_frame_count(rest)
+                    .map_err(|e| DebuggerError::InvalidValue(rest.to_string(), e))?;
+                DebuggerAction::FrameAdvance(n)
+            }
             "b" | "break" => match parse_address(rest) {
-                Ok(addr) => DebuggerAction::SetBreakpoint(addr),
-                Err(e) => return Err(DebuggerError::InvalidValue(rest.to_string(), e)),
+                Ok(addr) => DebuggerAction::SetBreakpoint(BreakpointTarget::Address(addr)),
+                Err(e) => {
+                    if let Ok(DebuggerAction::FrameAdvance(n)) = rest.parse() {
+                        DebuggerAction::SetBreakpoint(BreakpointTarget::Frames(n))
+                    } else {
+                        return Err(DebuggerError::InvalidValue(rest.to_string(), e));
+                    }
+                }
             },
             "d" | "del" | "delete" => match rest.parse() {
                 Ok(index) => DebuggerAction::DeleteBreakpoint(index),
@@ -49,9 +70,16 @@ impl FromStr for DebuggerAction {
     }
 }
 
+#[derive(Debug)]
+pub enum BreakpointTarget {
+    Address(u16),
+    Frames(NonZeroU32),
+}
+
 pub struct Debugger {
     breakpoints: Vec<Option<u16>>,
     trap: bool,
+    frames_to_wait: Option<NonZeroU32>,
 }
 
 impl Debugger {
@@ -59,6 +87,7 @@ impl Debugger {
         Self {
             breakpoints: Vec::new(),
             trap: true,
+            frames_to_wait: None,
         }
     }
 
@@ -94,13 +123,27 @@ impl Debugger {
         }
     }
 
+    pub fn trap_frame(&mut self) {
+        if let Some(frames) = self.frames_to_wait {
+            self.frames_to_wait = NonZeroU32::new(frames.get() - 1);
+            if self.frames_to_wait.is_none() {
+                self.trap = true;
+            }
+        }
+    }
+
     pub fn untrap(&mut self) {
         self.trap = false;
     }
 
-    pub fn set_breakpoint(&mut self, address: u16) {
-        if self.find_breakpoint(address).is_none() {
-            self.breakpoints.push(Some(address))
+    pub fn set_breakpoint(&mut self, target: BreakpointTarget) {
+        match target {
+            BreakpointTarget::Address(address) => {
+                if self.find_breakpoint(address).is_none() {
+                    self.breakpoints.push(Some(address))
+                }
+            }
+            BreakpointTarget::Frames(n) => self.frames_to_wait = Some(n),
         }
     }
 

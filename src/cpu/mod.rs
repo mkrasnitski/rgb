@@ -9,7 +9,7 @@ mod registers;
 use crate::apu::Apu;
 use crate::bus::joypad::Joypad;
 use crate::bus::{Cartridge, MemoryBus};
-use crate::debug::{Debugger, DebuggerAction};
+use crate::debug::{BreakpointTarget, Debugger, DebuggerAction};
 use crate::ppu::Ppu;
 use crate::utils::BitExtract;
 use instruction::*;
@@ -99,7 +99,11 @@ impl Cpu {
                         DebuggerAction::Info => println!("{self:?}"),
                         DebuggerAction::Continue => debugger.untrap(),
                         DebuggerAction::Step => break,
-                        DebuggerAction::SetBreakpoint(address) => debugger.set_breakpoint(address),
+                        DebuggerAction::FrameAdvance(n) => {
+                            debugger.set_breakpoint(BreakpointTarget::Frames(n));
+                            debugger.untrap();
+                        }
+                        DebuggerAction::SetBreakpoint(target) => debugger.set_breakpoint(target),
                         DebuggerAction::DeleteBreakpoint(index) => {
                             debugger.delete_breakpoint(index)
                         }
@@ -108,6 +112,9 @@ impl Cpu {
             }
             self.step()?;
             if self.ppu_mut().draw_check() {
+                if let Some(debugger) = debugger.as_mut() {
+                    debugger.trap_frame()
+                }
                 break Ok(());
             }
         }
