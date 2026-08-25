@@ -1,7 +1,9 @@
-use anyhow::Result;
-use num_traits::FromPrimitive;
 use std::fmt;
 use std::io::{BufWriter, Write};
+
+use anyhow::Result;
+use jiff::{Timestamp, tz::TimeZone};
+use num_traits::FromPrimitive;
 
 mod instruction;
 mod registers;
@@ -102,6 +104,19 @@ impl Cpu {
                         DebuggerAction::FrameAdvance(n) => {
                             debugger.set_breakpoint(BreakpointTarget::Frames(n));
                             debugger.untrap();
+                        }
+                        DebuggerAction::Screenshot(path) => {
+                            self.ppu_mut().screenshot(
+                                path.as_deref().unwrap_or(
+                                    format!(
+                                        "screenshot_{}.png",
+                                        Timestamp::now()
+                                            .to_zoned(TimeZone::system())
+                                            .strftime("%Y-%m-%d_%H:%M:%S")
+                                    )
+                                    .as_ref(),
+                                ),
+                            )?;
                         }
                         DebuggerAction::SetBreakpoint(target) => debugger.set_breakpoint(target),
                         DebuggerAction::DeleteBreakpoint(index) => {

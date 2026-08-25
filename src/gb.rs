@@ -80,6 +80,13 @@ impl ApplicationHandler for Gameboy {
                             self.cpu.toggle_frame_limiter();
                         }
                     }
+                    Hotkey::Screenshot => {
+                        if pressed {
+                            if let Err(e) = self.cpu.ppu_mut().screenshot("a.png") {
+                                println!("{e:?}");
+                            }
+                        }
+                    }
                 },
                 DisplayEvent::Quit => {
                     if let Err(e) = self.cpu.save_external_ram() {

@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use crate::utils::BitExtract;
 use anyhow::Result;
+use image::{ImageBuffer, Rgba};
 use pixels::Pixels;
 
 const WHITE: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
@@ -314,6 +317,21 @@ impl Ppu {
         }
         self.first_lcd_frame = false;
         pixels.render()?;
+        Ok(())
+    }
+
+    pub fn screenshot(&self, path: impl AsRef<Path>) -> Result<()> {
+        ImageBuffer::<Rgba<_>, _>::from_vec(
+            160,
+            144,
+            self.viewport
+                .iter()
+                .flatten()
+                .flat_map(Pixel::color)
+                .collect(),
+        )
+        .unwrap()
+        .save(path)?;
         Ok(())
     }
 

@@ -15,3 +15,4 @@ select = "tab"
 
 [hotkeys.emu]
 toggle_frame_limiter = "space"
+screenshot = "F12"

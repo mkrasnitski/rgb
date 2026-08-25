@@ -23,6 +23,7 @@ impl KeyMap {
                     (keys.joypad.start, Hotkey::Joypad(JoypadButton::Start)),
                     (keys.joypad.select, Hotkey::Joypad(JoypadButton::Select)),
                     (keys.emu.toggle_frame_limiter, Hotkey::ToggleFrameLimiter),
+                    (keys.emu.screenshot, Hotkey::Screenshot),
                 ]
                 .map(|(k, h)| (k.into(), h)),
             ),
@@ -38,6 +39,7 @@ impl KeyMap {
 pub enum Hotkey {
     Joypad(JoypadButton),
     ToggleFrameLimiter,
+    Screenshot,
 }
 
 #[derive(Copy, Clone)]
@@ -90,6 +92,19 @@ pub enum KeyCode {
     Enter,
     Space,
     Tab,
+
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
 }
 
 impl From<KeyCode> for WinitKeyCode {
@@ -130,6 +145,19 @@ impl From<KeyCode> for WinitKeyCode {
             KeyCode::Enter => Self::Enter,
             KeyCode::Space => Self::Space,
             KeyCode::Tab => Self::Tab,
+
+            KeyCode::F1 => Self::F1,
+            KeyCode::F2 => Self::F2,
+            KeyCode::F3 => Self::F3,
+            KeyCode::F4 => Self::F4,
+            KeyCode::F5 => Self::F5,
+            KeyCode::F6 => Self::F6,
+            KeyCode::F7 => Self::F7,
+            KeyCode::F8 => Self::F8,
+            KeyCode::F9 => Self::F9,
+            KeyCode::F10 => Self::F10,
+            KeyCode::F11 => Self::F12,
+            KeyCode::F12 => Self::F12,
         }
     }
 }
@@ -185,12 +213,14 @@ impl Default for JoypadBindings {
 #[derive(Deserialize)]
 pub struct EmuBindings {
     toggle_frame_limiter: KeyCode,
+    screenshot: KeyCode,
 }
 
 impl Default for EmuBindings {
     fn default() -> Self {
         EmuBindings {
             toggle_frame_limiter: KeyCode::Space,
+            screenshot: KeyCode::F12,
         }
     }
 }

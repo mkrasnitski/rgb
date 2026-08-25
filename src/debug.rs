@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::num::{NonZeroU32, ParseIntError};
+use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::Result;
@@ -10,6 +11,7 @@ pub enum DebuggerAction {
     Continue,
     Step,
     FrameAdvance(NonZeroU32),
+    Screenshot(Option<PathBuf>),
     SetBreakpoint(BreakpointTarget),
     DeleteBreakpoint(usize),
 }
@@ -49,6 +51,9 @@ impl FromStr for DebuggerAction {
                 let n = parse_frame_count(rest)
                     .map_err(|e| DebuggerError::InvalidValue(rest.to_string(), e))?;
                 DebuggerAction::FrameAdvance(n)
+            }
+            "ss" | "screenshot" => {
+                DebuggerAction::Screenshot((!rest.is_empty()).then(|| rest.trim().into()))
             }
             "b" | "break" => match parse_address(rest) {
                 Ok(addr) => DebuggerAction::SetBreakpoint(BreakpointTarget::Address(addr)),
