@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+use std::fmt;
 use std::io::Write;
 use std::num::{NonZeroU32, ParseIntError};
 use std::path::PathBuf;
@@ -16,10 +18,26 @@ pub enum DebuggerAction {
     DeleteBreakpoint(usize),
 }
 
+#[derive(Debug)]
 pub enum DebuggerError {
     UnknownAction,
     InvalidValue(String, ParseIntError),
 }
+
+impl fmt::Display for DebuggerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DebuggerError::UnknownAction => {
+                write!(f, "Unknown debugger command")
+            }
+            DebuggerError::InvalidValue(value, e) => {
+                write!(f, "Invalid value `{value}`: {e}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DebuggerError {}
 
 fn parse_address(s: &str) -> Result<u16, ParseIntError> {
     if let Some(hex) = s.strip_prefix("0x") {
@@ -82,22 +100,36 @@ pub enum BreakpointTarget {
 }
 
 pub struct Debugger {
+    actions: VecDeque<DebuggerAction>,
     breakpoints: Vec<Option<u16>>,
     trap: bool,
     frames_to_wait: Option<NonZeroU32>,
 }
 
 impl Debugger {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(debugfile: Option<PathBuf>) -> Result<Self> {
+        let actions = debugfile
+            .map(|path| {
+                std::fs::read_to_string(path)?
+                    .lines()
+                    .map(|line| line.parse().map_err(Into::into))
+                    .collect::<Result<_>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Ok(Self {
+            actions,
             breakpoints: Vec::new(),
             trap: true,
             frames_to_wait: None,
-        }
+        })
     }
 
     pub fn next_action(&mut self) -> Option<Result<DebuggerAction>> {
-        self.trap.then(|| self.parse_next_action())
+        self.trap.then(|| match self.actions.pop_front() {
+            Some(action) => Ok(action),
+            None => self.parse_next_action(),
+        })
     }
 
     fn parse_next_action(&mut self) -> Result<DebuggerAction> {
@@ -109,14 +141,7 @@ impl Debugger {
             let input = input.trim();
             match input.parse() {
                 Ok(action) => return Ok(action),
-                Err(e) => match e {
-                    DebuggerError::UnknownAction => {
-                        println!("Unknown debugger command: {input}");
-                    }
-                    DebuggerError::InvalidValue(value, e) => {
-                        println!("Invalid value `{value}`: {e} - \"{input}\"");
-                    }
-                },
+                Err(e) => println!("{e}: \"{input}\""),
             }
         }
     }

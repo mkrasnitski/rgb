@@ -48,7 +48,7 @@ impl Gameboy {
         Ok(Self {
             cpu,
             display,
-            debugger: args.debug.then(Debugger::new),
+            debugger: args.debug.map(Debugger::new).transpose()?,
         })
     }
 }

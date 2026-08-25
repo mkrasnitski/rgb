@@ -19,8 +19,8 @@ pub struct Args {
     #[arg(short, long, default_value = "config.toml", help = "Config file")]
     pub config: PathBuf,
 
-    #[arg(short, long = "debug", help = "Enable the debugger")]
-    pub debug: bool,
+    #[arg(short, long = "debug", id = "SCRIPT", help = "Enable the debugger")]
+    pub debug: Option<Option<PathBuf>>,
 
     #[arg(short, long, help = "Enable logs")]
     pub logfile: Option<PathBuf>,
