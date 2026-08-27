@@ -25,7 +25,10 @@ pub struct Args {
     #[arg(short, long, help = "Enable logs")]
     pub logfile: Option<PathBuf>,
 
-    #[arg(long, default_value = "false")]
+    #[arg(long)]
+    pub uncap_framerate: bool,
+
+    #[arg(long)]
     pub disable_audio: bool,
 }
 

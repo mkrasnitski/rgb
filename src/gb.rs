@@ -21,7 +21,7 @@ pub struct Gameboy {
 
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
-        let display = Display::new(config.keymap(), config.scale);
+        let display = Display::new(config.keymap(), config.scale, !args.uncap_framerate);
         let bootrom = if args.skip_bootrom {
             None
         } else {
@@ -43,7 +43,11 @@ impl Gameboy {
                 }
             })
             .transpose()?;
-        let apu = Apu::new(config.audio_volume, args.disable_audio);
+        let apu = Apu::new(
+            config.audio_volume,
+            args.disable_audio,
+            !args.uncap_framerate,
+        );
         let cpu = Cpu::new(bootrom, cartridge, apu, logfile);
         Ok(Self {
             cpu,

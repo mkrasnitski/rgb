@@ -33,12 +33,12 @@ pub struct Display {
 }
 
 impl Display {
-    pub fn new(keymap: KeyMap, scale_factor: u32) -> Self {
+    pub fn new(keymap: KeyMap, scale_factor: u32, limit_framerate: bool) -> Self {
         Self {
             surface: None,
             keymap,
             scale_factor,
-            limit_framerate: true,
+            limit_framerate,
             frame_limiter: spin_sleep_util::interval(Duration::from_secs_f64(1.0 / FRAMERATE)),
         }
     }

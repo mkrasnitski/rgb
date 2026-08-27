@@ -20,7 +20,9 @@ Usage: rgb [OPTIONS] <rom-path>
 Options:
       --skip-bootrom
   -c, --config <CONFIG>    Config file [default: config.toml]
-  -l, --logfile <LOGFILE>  Enable debug logs
+  -d, --debug [<SCRIPT>]   Enable the debugger
+  -l, --logfile <LOGFILE>  Enable logs
+      --uncap-framerate
       --disable-audio
   -h, --help               Print help
 ```

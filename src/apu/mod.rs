@@ -67,13 +67,13 @@ impl Panning {
 }
 
 impl Apu {
-    pub fn new(volume: f32, disable_audio: bool) -> Self {
+    pub fn new(volume: f32, disable_audio: bool, limit_framerate: bool) -> Self {
         let (sample_tx, sample_rx) = channel();
         if !disable_audio {
             std::thread::spawn(move || spawn_audio(sample_rx, volume));
         }
         Self {
-            sampler: Sampler::new(sample_tx),
+            sampler: Sampler::new(sample_tx, limit_framerate),
             channel1: Default::default(),
             channel2: Default::default(),
             channel3: Default::default(),
@@ -243,12 +243,12 @@ struct Sampler {
 }
 
 impl Sampler {
-    fn new(sample_tx: Sender<(f32, f32)>) -> Self {
+    fn new(sample_tx: Sender<(f32, f32)>, limit_framerate: bool) -> Self {
         Self {
             sample_tx,
             sample_buffer: Vec::with_capacity(8192),
             instant: Instant::now(),
-            limit_framerate: true,
+            limit_framerate,
         }
     }
 
