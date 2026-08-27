@@ -69,6 +69,11 @@ impl ApplicationHandler for Gameboy {
                         println!("{e:?}");
                         self.display.quit(event_loop);
                     }
+                    if let Some(debugger) = &self.debugger
+                        && debugger.quit
+                    {
+                        self.display.quit(event_loop);
+                    }
                 }
                 DisplayEvent::Hotkey((hotkey, pressed)) => match hotkey {
                     Hotkey::Joypad(button) => {

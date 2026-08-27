@@ -9,6 +9,7 @@ use anyhow::Result;
 
 #[derive(Debug)]
 pub enum DebuggerAction {
+    Quit,
     Info,
     Continue,
     Step,
@@ -62,6 +63,7 @@ impl FromStr for DebuggerAction {
         let (cmd, rest) = s.split_once(' ').unwrap_or((s, ""));
         let rest = rest.trim();
         let action = match cmd {
+            "q" | "quit" => DebuggerAction::Quit,
             "i" | "info" => DebuggerAction::Info,
             "c" | "continue" => DebuggerAction::Continue,
             "s" | "step" => DebuggerAction::Step,
@@ -104,6 +106,7 @@ pub struct Debugger {
     breakpoints: Vec<Option<u16>>,
     trap: bool,
     frames_to_wait: Option<NonZeroU32>,
+    pub quit: bool,
 }
 
 impl Debugger {
@@ -122,6 +125,7 @@ impl Debugger {
             breakpoints: Vec::new(),
             trap: true,
             frames_to_wait: None,
+            quit: false,
         })
     }
 

@@ -98,6 +98,10 @@ impl Cpu {
                 debugger.try_break(self.registers.pc);
                 while let Some(action) = debugger.next_action().transpose()? {
                     match action {
+                        DebuggerAction::Quit => {
+                            debugger.quit = true;
+                            return Ok(());
+                        }
                         DebuggerAction::Info => println!("{self:?}"),
                         DebuggerAction::Continue => debugger.untrap(),
                         DebuggerAction::Step => break,
@@ -130,7 +134,7 @@ impl Cpu {
                 if let Some(debugger) = debugger.as_mut() {
                     debugger.trap_frame()
                 }
-                break Ok(());
+                return Ok(());
             }
         }
     }
