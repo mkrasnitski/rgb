@@ -23,7 +23,7 @@ const DUTY_CYCLES: [u8; 4] = [
 ];
 
 pub struct Apu {
-    sampler: Sampler,
+    sampler: Option<Sampler>,
     channel1: channel1::Channel1,
     channel2: channel2::Channel2,
     channel3: channel3::Channel3,
@@ -68,12 +68,15 @@ impl Panning {
 
 impl Apu {
     pub fn new(volume: f32, disable_audio: bool, limit_framerate: bool) -> Self {
-        let (sample_tx, sample_rx) = channel();
-        if !disable_audio {
+        let sampler = if disable_audio {
+            None
+        } else {
+            let (sample_tx, sample_rx) = channel();
             std::thread::spawn(move || spawn_audio(sample_rx, volume));
-        }
+            Some(Sampler::new(sample_tx, limit_framerate))
+        };
         Self {
-            sampler: Sampler::new(sample_tx, limit_framerate),
+            sampler,
             channel1: Default::default(),
             channel2: Default::default(),
             channel3: Default::default(),
@@ -168,8 +171,9 @@ impl Apu {
         let right_vol = (self.right_volume as f32 + 1.0) / 8.0;
         let (left_sample, right_sample) = self.sample();
 
-        self.sampler
-            .push_sample((left_sample * left_vol, right_sample * right_vol));
+        if let Some(sampler) = &mut self.sampler {
+            sampler.push_sample((left_sample * left_vol, right_sample * right_vol));
+        }
     }
 
     fn sample(&self) -> (f32, f32) {
@@ -202,7 +206,9 @@ impl Apu {
     }
 
     pub fn toggle_frame_limiter(&mut self) {
-        self.sampler.limit_framerate = !self.sampler.limit_framerate;
+        if let Some(sampler) = &mut self.sampler {
+            sampler.limit_framerate = !sampler.limit_framerate;
+        }
     }
 }
 

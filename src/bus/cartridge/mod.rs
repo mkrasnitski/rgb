@@ -44,12 +44,12 @@ pub struct Cartridge {
 }
 
 impl Cartridge {
-    pub fn new(rom_path: PathBuf, saves_dir: PathBuf) -> Result<Self> {
-        let mut rom = std::fs::read(&rom_path)?;
+    pub fn new(rom_path: &Path, saves_dir: &Path) -> Result<Self> {
+        let mut rom = std::fs::read(rom_path)?;
         let rom_name = rom_path.file_stem().unwrap();
 
-        std::fs::create_dir_all(&saves_dir)?;
-        let mut save_path = saves_dir;
+        std::fs::create_dir_all(saves_dir)?;
+        let mut save_path = saves_dir.to_owned();
         save_path.push(rom_name);
         save_path.set_extension("sav");
 

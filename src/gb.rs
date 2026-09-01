@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::fs::File;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowId;
 
 use crate::apu::Apu;
@@ -15,23 +15,22 @@ use crate::hotkeys::Hotkey;
 
 pub struct Gameboy {
     cpu: Cpu,
-    display: Display,
+    display: Option<Display>,
     debugger: Option<Debugger>,
 }
 
 impl Gameboy {
     pub fn new(args: Args, config: Config) -> Result<Self> {
-        let display = Display::new(config.keymap(), config.scale, !args.uncap_framerate);
         let bootrom = if args.skip_bootrom {
             None
         } else {
             Some(
-                std::fs::read(config.bootrom)?
+                std::fs::read(&config.bootrom)?
                     .try_into()
                     .expect("Bootrom not 0x100 in length"),
             )
         };
-        let mut cartridge = Cartridge::new(args.cartridge, config.saves_dir)?;
+        let mut cartridge = Cartridge::new(&args.cartridge, &config.saves_dir)?;
         cartridge.load_external_ram()?;
         let logfile = args
             .logfile
@@ -45,38 +44,67 @@ impl Gameboy {
             .transpose()?;
         let apu = Apu::new(
             config.audio_volume,
-            args.disable_audio,
+            args.disable_audio || args.disable_video,
             !args.uncap_framerate,
         );
         let cpu = Cpu::new(bootrom, cartridge, apu, logfile);
+        let display = if args.disable_video {
+            None
+        } else {
+            Some(Display::new(
+                config.keymap(),
+                config.scale,
+                !args.uncap_framerate,
+            ))
+        };
         Ok(Self {
             cpu,
             display,
             debugger: args.debug.map(Debugger::new).transpose()?,
         })
     }
+
+    pub fn run(mut self) -> Result<()> {
+        if self.display.is_some() {
+            EventLoop::new()?.run_app(&mut self)?;
+        } else {
+            loop {
+                self.cpu.run_frame(&mut self.debugger)?;
+                if let Some(debugger) = &self.debugger
+                    && debugger.quit
+                {
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl ApplicationHandler for Gameboy {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Err(e) = self.display.reinit_surface(event_loop) {
+        if let Some(display) = &mut self.display
+            && let Err(e) = display.reinit_surface(event_loop)
+        {
             println!("{e:?}");
-            self.display.quit(event_loop);
+            display.quit(event_loop);
         }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
-        if let Some(display_event) = self.display.process_event(&event) {
+        if let Some(display) = &mut self.display
+            && let Some(display_event) = display.process_event(&event)
+        {
             match display_event {
                 DisplayEvent::RedrawRequested => {
-                    if let Err(e) = self.display.draw_frame(&mut self.cpu, &mut self.debugger) {
+                    if let Err(e) = display.draw_frame(&mut self.cpu, &mut self.debugger) {
                         println!("{e:?}");
-                        self.display.quit(event_loop);
+                        display.quit(event_loop);
                     }
                     if let Some(debugger) = &self.debugger
                         && debugger.quit
                     {
-                        self.display.quit(event_loop);
+                        display.quit(event_loop);
                     }
                 }
                 DisplayEvent::Hotkey((hotkey, pressed)) => match hotkey {
@@ -85,7 +113,7 @@ impl ApplicationHandler for Gameboy {
                     }
                     Hotkey::ToggleFrameLimiter => {
                         if pressed {
-                            self.display.toggle_frame_limiter();
+                            display.toggle_frame_limiter();
                             self.cpu.toggle_frame_limiter();
                         }
                     }
@@ -101,7 +129,7 @@ impl ApplicationHandler for Gameboy {
                     if let Err(e) = self.cpu.save_external_ram() {
                         println!("Failed to save: {e:?}");
                     }
-                    self.display.quit(event_loop);
+                    display.quit(event_loop);
                 }
             }
         }

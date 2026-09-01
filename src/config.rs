@@ -30,6 +30,9 @@ pub struct Args {
 
     #[arg(long)]
     pub disable_audio: bool,
+
+    #[arg(long)]
+    pub disable_video: bool,
 }
 
 #[derive(Deserialize)]
