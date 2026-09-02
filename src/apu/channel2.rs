@@ -20,11 +20,7 @@ impl Channel2 {
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0xff16 => (self.duty << 6) | 0x3f,
-            0xff17 => {
-                (self.volume.initial_level << 4)
-                    | ((self.volume.direction as u8) << 3)
-                    | self.volume.pace
-            }
+            0xff17 => self.volume.read(),
             0xff18 => 0xff,
             0xff19 => ((self.length.is_enabled() as u8) << 6) | 0xbf,
             _ => unreachable!(),
@@ -38,9 +34,7 @@ impl Channel2 {
                 self.duty = (val >> 6) & 0b11;
             }
             0xff17 => {
-                self.volume.pace = val & 0b111;
-                self.volume.direction = val.bit(3);
-                self.volume.initial_level = val >> 4;
+                self.volume.write(val, self.enabled);
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {

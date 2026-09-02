@@ -20,11 +20,7 @@ impl Channel4 {
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0xff20 => 0xff,
-            0xff21 => {
-                (self.volume.initial_level << 4)
-                    | ((self.volume.direction as u8) << 3)
-                    | self.volume.pace
-            }
+            0xff21 => self.volume.read(),
             0xff22 => (self.clock_shift << 4) | ((self.lfsr_width as u8) << 3) | self.clock_divider,
             0xff23 => ((self.length.is_enabled() as u8) << 6) | 0xbf,
 
@@ -36,9 +32,7 @@ impl Channel4 {
         match addr {
             0xff20 => self.length.set_timer(val & 0b111111),
             0xff21 => {
-                self.volume.pace = val & 0b111;
-                self.volume.direction = val.bit(3);
-                self.volume.initial_level = val >> 4;
+                self.volume.write(val, self.enabled);
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {

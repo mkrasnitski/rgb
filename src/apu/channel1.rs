@@ -27,11 +27,7 @@ impl Channel1 {
                     | 0x80
             }
             0xff11 => (self.duty << 6) | 0x3f,
-            0xff12 => {
-                (self.volume.initial_level << 4)
-                    | ((self.volume.direction as u8) << 3)
-                    | self.volume.pace
-            }
+            0xff12 => self.volume.read(),
             0xff13 => 0xff,
             0xff14 => ((self.length.is_enabled() as u8) << 6) | 0xbf,
             _ => unreachable!(),
@@ -52,9 +48,7 @@ impl Channel1 {
                 self.duty = (val >> 6) & 0b11;
             }
             0xff12 => {
-                self.volume.pace = val & 0b111;
-                self.volume.direction = val.bit(3);
-                self.volume.initial_level = val >> 4;
+                self.volume.write(val, self.enabled);
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {

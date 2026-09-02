@@ -1,3 +1,5 @@
+use crate::utils::BitExtract;
+
 pub struct LengthCounter<const N: u16> {
     enable: bool,
     timer: u16,
@@ -52,28 +54,62 @@ impl<const N: u16> Default for LengthCounter<N> {
 
 #[derive(Default)]
 pub struct VolumeEnvelope {
-    pub pace: u8,
-    pub direction: bool,
-    pub initial_level: u8,
+    pace: u8,
+    direction: bool,
+    initial_level: u8,
 
     level: u8,
     pace_timer: u8,
+    updating: bool,
 }
 
 impl VolumeEnvelope {
+    pub fn read(&self) -> u8 {
+        (self.initial_level << 4) | ((self.direction as u8) << 3) | self.pace
+    }
+
+    pub fn write(&mut self, val: u8, enabled: bool) {
+        let old_pace = self.pace;
+        let old_direction = self.direction;
+
+        self.pace = val & 0b111;
+        self.direction = val.bit(3);
+        self.initial_level = val >> 4;
+
+        // Zombie mode
+        if enabled {
+            if old_pace == 0 && self.updating {
+                self.level += 1;
+            } else if !old_direction {
+                self.level += 2;
+            }
+
+            if old_direction != self.direction {
+                self.level = 16 - self.level;
+            }
+
+            self.level &= 0xf;
+        }
+    }
+
     pub fn trigger(&mut self) {
         self.level = self.initial_level;
         self.pace_timer = self.get_pace();
+        self.updating = true;
     }
 
     pub fn tick(&mut self) {
         if self.pace != 0 {
             self.pace_timer -= 1;
             if self.pace_timer == 0 {
+                let old_level = self.level;
                 if self.direction {
                     self.level = std::cmp::min(15, self.level + 1);
                 } else {
                     self.level = self.level.saturating_sub(1);
+                }
+                if self.level == old_level {
+                    self.updating = false;
                 }
                 self.pace_timer = self.get_pace();
             }
