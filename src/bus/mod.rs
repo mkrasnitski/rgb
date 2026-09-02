@@ -172,7 +172,7 @@ impl MemoryBus {
             0xff4d => ((self.double_speed as u8) << 7) | self.prepare_speed_switch as u8 | 0x7e,
 
             0xff51..=0xff54 => 0xff,
-            0xff55 => self.vdma.length.unwrap_or(0xff),
+            0xff55 => ((self.vdma.cancelled as u8) << 7) | self.vdma.length.unwrap_or(0xff),
 
             0xff70 => self.wram_bank | 0xf8,
 
@@ -265,14 +265,15 @@ impl MemoryBus {
 
             0xff51 => self.vdma.src = (self.vdma.src & 0x00ff) | ((val as u16) << 8),
             0xff52 => self.vdma.src = (self.vdma.src & 0xff00) | (val & 0xf0) as u16,
-            0xff53 => self.vdma.dest = (self.vdma.dest & 0x00ff) | (((val & 0x1f) as u16) << 8),
+            0xff53 => self.vdma.dest = (self.vdma.dest & 0x00ff) | ((val as u16) << 8),
             0xff54 => self.vdma.dest = (self.vdma.dest & 0xff00) | (val & 0xf0) as u16,
             0xff55 => {
+                let length = val & 0x7f;
                 if val.bit(7) {
-                    self.vdma.start(val & 0x7f, true);
+                    self.vdma.start(length, true);
                 } else {
-                    self.vdma.start(val & 0x7f, false);
-                    while self.vdma.length.is_some() {
+                    self.vdma.start(length, false);
+                    while self.vdma.remaining_length().is_some() {
                         self.tick_vdma(false)
                     }
                 }
@@ -307,16 +308,27 @@ impl MemoryBus {
     }
 
     pub fn tick_vdma(&mut self, hblank: bool) {
-        if let Some(length) = self.vdma.length
+        if let Some(length) = self.vdma.remaining_length()
             && (!hblank || self.vdma.hblank)
         {
-            for i in 0..16 {
-                let offset = self.vdma.offset + i;
-                let val = self.read(self.vdma.src + offset);
-                self.write(0x8000 + self.vdma.dest + offset, val);
+            for _ in 0..16 {
+                let val = self.read_vdma(self.vdma.src);
+                self.write(0x8000 + (self.vdma.dest & 0x1fff), val);
+                self.vdma.src = self.vdma.src.wrapping_add(1);
+                let (dest, overflow) = self.vdma.dest.overflowing_add(1);
+                if overflow {
+                    self.vdma.cancelled = true;
+                }
+                self.vdma.dest = dest;
             }
-            self.vdma.offset += 16;
             self.vdma.length = length.checked_sub(1);
+        }
+    }
+
+    fn read_vdma(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x7fff | 0xa000..=0xdfff => self.read(addr),
+            _ => 0xff,
         }
     }
 
@@ -357,15 +369,19 @@ impl Dma {
 struct Vdma {
     src: u16,
     dest: u16,
-    offset: u16,
     length: Option<u8>,
     hblank: bool,
+    cancelled: bool,
 }
 
 impl Vdma {
     fn start(&mut self, length: u8, hblank: bool) {
         self.length = Some(length);
         self.hblank = hblank;
-        self.offset = 0;
+        self.cancelled = false;
+    }
+
+    fn remaining_length(&self) -> Option<u8> {
+        if self.cancelled { None } else { self.length }
     }
 }
