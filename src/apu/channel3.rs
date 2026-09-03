@@ -81,6 +81,10 @@ impl Channel3 {
         }
     }
 
+    pub fn power_on(&mut self) {
+        self.length.reset_tick();
+    }
+
     pub fn power_off(&mut self) {
         let aram = self.aram;
         *self = Default::default();

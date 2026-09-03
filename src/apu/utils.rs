@@ -23,6 +23,10 @@ impl<const N: u16> LengthCounter<N> {
         if extra_clock { self.clock() } else { false }
     }
 
+    pub fn reset_tick(&mut self) {
+        self.tick = false;
+    }
+
     pub fn is_enabled(&self) -> bool {
         self.enable
     }

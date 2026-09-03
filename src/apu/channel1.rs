@@ -83,6 +83,11 @@ impl Channel1 {
         }
     }
 
+    pub fn power_on(&mut self) {
+        self.frame_sequence = 7;
+        self.length.reset_tick();
+    }
+
     pub fn power_off(&mut self) {
         *self = Default::default()
     }

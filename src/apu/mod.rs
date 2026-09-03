@@ -134,7 +134,6 @@ impl Apu {
             0xff25 => self.panning = Panning::new(val),
             0xff26 => {
                 let bit = val.bit(7);
-                self.master_enable = bit;
                 if !bit {
                     // Powering off APU resets all registers to 0
                     self.channel1.power_off();
@@ -146,7 +145,13 @@ impl Apu {
                     self.left_volume = 0;
                     self.vin_right = false;
                     self.right_volume = 0;
+                } else if !self.master_enable {
+                    self.channel1.power_on();
+                    self.channel2.power_on();
+                    self.channel3.power_on();
+                    self.channel4.power_on();
                 }
+                self.master_enable = bit;
             }
             _ => unreachable!(),
         }
