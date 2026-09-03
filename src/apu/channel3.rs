@@ -40,7 +40,14 @@ impl Channel3 {
             0xff1c => (self.volume << 5) | 0x9f,
             0xff1d => 0xff,
             0xff1e => ((self.length.is_enabled() as u8) << 6) | 0xbf,
-            0xff30..=0xff3f => self.aram[addr as usize - 0xff30],
+            0xff30..=0xff3f => {
+                let index = if self.enabled {
+                    self.sample_index as usize / 2
+                } else {
+                    addr as usize - 0xff30
+                };
+                self.aram[index]
+            }
 
             _ => unreachable!(),
         }
@@ -72,10 +79,19 @@ impl Channel3 {
                     if self.dac_enabled {
                         self.enabled = true;
                     }
+                    self.period_counter = self.period;
                     self.length.trigger();
+                    self.sample_index = 0;
                 }
             }
-            0xff30..=0xff3f => self.aram[addr as usize - 0xff30] = val,
+            0xff30..=0xff3f => {
+                let index = if self.enabled {
+                    self.sample_index as usize / 2
+                } else {
+                    addr as usize - 0xff30
+                };
+                self.aram[index] = val;
+            }
 
             _ => unreachable!(),
         }
