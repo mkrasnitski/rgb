@@ -5,7 +5,7 @@ pub struct Channel3 {
     dac_enabled: bool,
     volume: u8,
     period: u16,
-    trigger: bool,
+    enabled: bool,
 
     aram: [u8; 0x10],
     sample_index: u8,
@@ -19,7 +19,7 @@ impl Default for Channel3 {
             dac_enabled: false,
             volume: 0,
             period: 0,
-            trigger: false,
+            enabled: false,
 
             aram: [
                 0xAE, 0x9D, 0x41, 0xFA, 0x50, 0x77, 0x22, 0xCE, 0x00, 0xB9, 0x1F, 0xDB, 0x1A, 0xB3,
@@ -51,7 +51,7 @@ impl Channel3 {
             0xff1a => {
                 self.dac_enabled = val.bit(7);
                 if !self.dac_enabled {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
             }
             0xff1b => self.length.set_timer(val),
@@ -65,12 +65,12 @@ impl Channel3 {
                 self.period |= ((val & 0b111) as u16) << 8;
 
                 if self.length.set_enable(val.bit(6)) {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
 
                 if val.bit(7) {
                     if self.dac_enabled {
-                        self.trigger = true;
+                        self.enabled = true;
                     }
                     self.length.trigger();
                 }
@@ -88,11 +88,11 @@ impl Channel3 {
     }
 
     pub fn enabled(&self) -> bool {
-        self.trigger
+        self.enabled
     }
 
     pub fn tick(&mut self) {
-        if self.trigger {
+        if self.enabled {
             self.period_counter += 1;
             if self.period_counter == 2048 {
                 self.sample_index = (self.sample_index + 1) % 32;
@@ -103,7 +103,7 @@ impl Channel3 {
 
     pub fn tick_frame_sequencer(&mut self) {
         if self.length.tick() {
-            self.trigger = false;
+            self.enabled = false;
         }
     }
 

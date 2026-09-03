@@ -6,7 +6,7 @@ pub struct Channel4 {
     clock_divider: u8,
     lfsr_width: bool,
     clock_shift: u8,
-    trigger: bool,
+    enabled: bool,
 
     lfsr: u16,
     period_counter: u16,
@@ -42,7 +42,7 @@ impl Channel4 {
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
             }
             0xff22 => {
@@ -52,11 +52,11 @@ impl Channel4 {
             }
             0xff23 => {
                 if self.length.set_enable(val.bit(6)) {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
                 if val.bit(7) {
                     if self.dac_enabled {
-                        self.trigger = true;
+                        self.enabled = true;
                     }
                     self.lfsr = 0x7fff;
                     self.length.trigger();
@@ -73,11 +73,11 @@ impl Channel4 {
     }
 
     pub fn enabled(&self) -> bool {
-        self.trigger
+        self.enabled
     }
 
     pub fn tick(&mut self) {
-        if self.trigger {
+        if self.enabled {
             self.period_counter = self.period_counter.saturating_sub(1);
             if self.period_counter == 0 {
                 let divider = if self.clock_divider == 0 {
@@ -99,7 +99,7 @@ impl Channel4 {
     pub fn tick_frame_sequencer(&mut self) {
         self.frame_sequence = (self.frame_sequence + 1) % 8;
         if self.length.tick() {
-            self.trigger = false;
+            self.enabled = false;
         }
         if self.frame_sequence == 7 {
             self.volume.tick();

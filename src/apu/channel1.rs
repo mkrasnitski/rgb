@@ -6,7 +6,7 @@ use crate::utils::BitExtract;
 pub struct Channel1 {
     duty: u8,
     period: u16,
-    trigger: bool,
+    enabled: bool,
 
     duty_position: u8,
     period_counter: u16,
@@ -43,7 +43,7 @@ impl Channel1 {
             0xff10 => {
                 self.sweep.step = val & 0b111;
                 if self.sweep.set_direction(val.bit(3)) {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
                 self.sweep.pace = (val >> 4) & 0b111;
             }
@@ -58,7 +58,7 @@ impl Channel1 {
 
                 self.dac_enabled = val & 0b11111000 != 0;
                 if !self.dac_enabled {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
             }
             0xff13 => {
@@ -70,18 +70,18 @@ impl Channel1 {
                 self.period |= ((val & 0b111) as u16) << 8;
 
                 if self.length.set_enable(val.bit(6)) {
-                    self.trigger = false;
+                    self.enabled = false;
                 }
 
                 if val.bit(7) {
                     if self.dac_enabled {
-                        self.trigger = true;
+                        self.enabled = true;
                     }
                     self.period_counter = self.period;
                     self.length.trigger();
                     self.volume.trigger();
                     if self.sweep.trigger(self.period) {
-                        self.trigger = false;
+                        self.enabled = false;
                     }
                 }
             }
@@ -94,11 +94,11 @@ impl Channel1 {
     }
 
     pub fn enabled(&self) -> bool {
-        self.trigger
+        self.enabled
     }
 
     pub fn tick(&mut self) {
-        if self.trigger {
+        if self.enabled {
             self.period_counter += 1;
             if self.period_counter == 2048 {
                 self.duty_position = (self.duty_position + 1) % 8;
@@ -110,7 +110,7 @@ impl Channel1 {
     pub fn tick_frame_sequencer(&mut self) {
         self.frame_sequence = (self.frame_sequence + 1) % 8;
         if self.length.tick() {
-            self.trigger = false;
+            self.enabled = false;
         }
         if self.frame_sequence == 7 {
             self.volume.tick();
@@ -122,7 +122,7 @@ impl Channel1 {
                 self.period = period;
             }
             if disable {
-                self.trigger = false;
+                self.enabled = false;
             }
         }
     }
