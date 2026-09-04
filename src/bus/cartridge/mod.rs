@@ -45,7 +45,7 @@ pub struct Cartridge {
 
 impl Cartridge {
     pub fn new(rom_path: PathBuf, saves_dir: PathBuf) -> Result<Self> {
-        let rom = std::fs::read(&rom_path)?;
+        let mut rom = std::fs::read(&rom_path)?;
         let rom_name = rom_path.file_stem().unwrap();
 
         std::fs::create_dir_all(&saves_dir)?;
@@ -53,15 +53,13 @@ impl Cartridge {
         save_path.push(rom_name);
         save_path.set_extension("sav");
 
-        let mbc = rom[0x147];
-        let rom_type = rom[0x148];
-        let ram_type = rom[0x149];
+        let num_banks = rom.len().div_ceil(1 << 14) as u16;
+        if num_banks != 2 << rom[0x148] {
+            println!("ROM size in header does not match");
+        }
+        rom.resize((num_banks as usize) << 14, 0);
 
-        let num_banks = match rom_type {
-            0x00..=0x08 => 2 << rom_type,
-            _ => unreachable!(),
-        };
-        let ram_size_kb = match ram_type {
+        let ram_size_kb = match rom[0x149] {
             0x00 => 0,
             0x01 => 2,
             0x02 => 8,
@@ -71,6 +69,7 @@ impl Cartridge {
             _ => unreachable!(),
         };
 
+        let mbc = rom[0x147];
         let mapper: Box<dyn Mapper> = match mbc {
             0x00 => Box::new(NoMapper {
                 rom: rom.try_into().unwrap(),
